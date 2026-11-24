@@ -1,9 +1,11 @@
-# Self-hosted Termindo sync server.
+# Termindo sync server for a VPS. Full guide: docs/deploy-vps.md
 #
-#   cd deploy
-#   cp .env.example .env        # then set TERMINDO_JWT_SECRET and POSTGRES_PASSWORD
-#   docker compose up -d --build                 # plain HTTP on :8080 (use behind your own proxy)
-#   docker compose --profile tls up -d --build   # + Caddy with automatic HTTPS for TERMINDO_DOMAIN
+#   cp .env.example .env                    # fill in TERMINDO_DOMAIN, secrets
+#   docker compose --profile tls up -d      # Postgres + server + Caddy (HTTPS) + backups
+#   ./update.sh                             # later: pull the newest image and restart
+#
+# Without the `tls` profile the server listens on 127.0.0.1:${TERMINDO_PORT} only,
+# for use behind a reverse proxy you already run.
 
 services:
   postgres:
@@ -22,10 +24,12 @@ services:
       retries: 10
 
   server:
+    # Prebuilt by .github/workflows/server-image.yml. `docker compose build` builds
+    # from source instead (needs ~2 GB RAM).
+    image: ${TERMINDO_IMAGE:-ghcr.io/bionyxxx/termindo-server:latest}
     build:
       context: ..
       dockerfile: apps/server/Dockerfile
-    image: termindo-server:latest
     restart: unless-stopped
     depends_on:
       postgres:
@@ -37,7 +41,8 @@ services:
       TERMINDO_TRUST_PROXY: ${TERMINDO_TRUST_PROXY:-false}
       RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "${TERMINDO_PORT:-8080}:8080"
+      # Loopback only: from the internet the server is reachable through Caddy (HTTPS).
+      - "127.0.0.1:${TERMINDO_PORT:-8080}:8080"
 
   caddy:
     image: caddy:2
@@ -47,12 +52,34 @@ services:
     environment:
       TERMINDO_DOMAIN: ${TERMINDO_DOMAIN:-localhost}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+
+  backup:
+    # Daily pg_dump with rotation. Dumps contain only what the server stores:
+    # ciphertext, password hashes and metadata (no plaintext secrets).
+    image: prodrigestivill/postgres-backup-local:17
+    profiles: ["tls", "backup"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: termindo
+      POSTGRES_USER: termindo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: ${BACKUP_SCHEDULE:-@daily}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
+      BACKUP_ON_START: ${BACKUP_ON_START:-FALSE}
+    volumes:
+      - ./backups:/backups
 
 volumes:
   pgdata:

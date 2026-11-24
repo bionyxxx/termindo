@@ -3,9 +3,8 @@
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY . .
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
-    cargo build --release -p termindo-server \
+# Plain RUN (no BuildKit cache mounts) so it also builds with the classic builder.
+RUN cargo build --release --locked -p termindo-server \
  && cp target/release/termindo-server /termindo-server
 
 FROM debian:bookworm-slim

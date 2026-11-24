@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmCloseTab: true,
   autoLockMinutes: 0,
   restoreSession: true,
-  defaultServerUrl: "http://localhost:8080",
+  defaultServerUrl: import.meta.env.VITE_DEFAULT_SYNC_URL?.trim() || "http://localhost:8080",
   sftpShowHidden: false,
 };
 
@@ -51,6 +51,8 @@ export const useSettings = create<SettingsStore>((set, get) => ({
     try {
       const raw = await api.settingGet("settings");
       const parsed = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
+      // Comes from the build (VITE_DEFAULT_SYNC_URL); older builds persisted localhost here.
+      delete parsed.defaultServerUrl;
       set({ settings: { ...DEFAULT_SETTINGS, ...parsed }, loaded: true });
     } catch {
       set({ loaded: true });

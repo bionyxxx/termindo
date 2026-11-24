@@ -1,4 +1,20 @@
+# HTTPS front for the Termindo sync server. Caddy obtains and renews a Let's Encrypt
+# certificate for TERMINDO_DOMAIN automatically (DNS must point to this server and
+# ports 80/443 must be reachable). With TERMINDO_DOMAIN=localhost it uses a local CA.
 {$TERMINDO_DOMAIN} {
 	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Matches the server's own request body limit.
+	request_body {
+		max_size 64MB
+	}
+
 	reverse_proxy server:8080
 }
