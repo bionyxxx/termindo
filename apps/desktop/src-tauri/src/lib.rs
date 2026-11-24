@@ -19,9 +19,42 @@ fn data_dir(app: &tauri::App) -> PathBuf {
     if let Ok(dir) = std::env::var("TERMINDO_DATA_DIR") {
         return PathBuf::from(dir);
     }
-    app.path()
+    let dir = app
+        .path()
         .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".termindo"))
+        .unwrap_or_else(|_| PathBuf::from(".termindo"));
+    migrate_legacy_data_dir(&dir);
+    dir
+}
+
+/// Early builds used the bundle identifier `dev.termindo.app`, which macOS
+/// confuses with an application bundle. Move that data directory over once.
+fn migrate_legacy_data_dir(dir: &std::path::Path) {
+    let Some(legacy) = dir.parent().map(|p| p.join("dev.termindo.app")) else {
+        return;
+    };
+    // The webview may already have created `dir` for its caches, so decide on the database.
+    if dir.join("termindo.db").exists() || !legacy.join("termindo.db").exists() {
+        return;
+    }
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        tracing::warn!("could not create data directory {}: {e}", dir.display());
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(&legacy) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let target = dir.join(entry.file_name());
+        if target.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::rename(entry.path(), &target) {
+            tracing::warn!("could not move {}: {e}", entry.path().display());
+        }
+    }
+    let _ = std::fs::remove_dir_all(&legacy);
+    tracing::info!(from = %legacy.display(), to = %dir.display(), "moved data directory");
 }
 
 /// Errors from the web UI, written to the app log (stderr).

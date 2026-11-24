@@ -43,6 +43,6 @@ after the stored cursor and applies it with last-write-wins on `updated_at`. Del
 tombstones.
 
 ## Persistence locations
-- Desktop data: OS app data dir (`~/.local/share/dev.termindo.app` on Linux) — override with
+- Desktop data: OS app data dir (`~/.local/share/dev.termindo.desktop` on Linux) — override with
   `TERMINDO_DATA_DIR`.
 - UI settings and last session layout: `settings` table (`ui.*` keys).

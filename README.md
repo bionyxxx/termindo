@@ -64,6 +64,22 @@ TERMINDO_TEST_DATABASE_URL=postgres://postgres:pg@localhost:55432/postgres cargo
 Useful env vars for the desktop app: `TERMINDO_DATA_DIR` (separate profile),
 `TERMINDO_FAST_KDF=1` (debug builds only: cheap KDF for testing), `RUST_LOG`.
 
+## Installers
+The **Installers** workflow (`.github/workflows/bundle.yml`) builds `.deb`, `.rpm`,
+AppImage (Linux), a universal `.dmg` (macOS, Apple Silicon + Intel) and `.msi` / NSIS
+`.exe` (Windows):
+
+- run it manually from the Actions tab (or `gh workflow run bundle.yml`) and download
+  the installers from the run's artifacts;
+- or push a version tag (`git tag v0.1.0 && git push origin v0.1.0`, matching `version`
+  in `apps/desktop/src-tauri/tauri.conf.json`) to also get a draft GitHub release.
+
+Installers are **not code-signed yet**: macOS needs right-click → Open (or
+`xattr -dr com.apple.quarantine /Applications/Termindo.app`), and Windows SmartScreen
+shows "More info → Run anyway".
+
+Local build: `cd apps/desktop && npx tauri build` (output in `target/release/bundle/`).
+
 ## Self-hosting sync
 See [docs/sync-protocol.md](docs/sync-protocol.md) and `deploy/docker-compose.yml`:
 
