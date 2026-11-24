@@ -17,6 +17,7 @@ export interface Settings {
   restoreSession: boolean;
   defaultServerUrl: string;
   sftpShowHidden: boolean;
+  checkUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreSession: true,
   defaultServerUrl: import.meta.env.VITE_DEFAULT_SYNC_URL?.trim() || "http://localhost:8080",
   sftpShowHidden: false,
+  checkUpdates: true,
 };
 
 interface SettingsStore {

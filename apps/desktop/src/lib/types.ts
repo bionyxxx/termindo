@@ -255,6 +255,14 @@ export type PromptEvent =
     }
   | { id: string; kind: "keyboardInteractive"; label: string; request: KbdRequest };
 
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  available: boolean;
+  url: string;
+  notes: string | null;
+}
+
 export interface CmdError {
   code: string;
   message: string;

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Cloud, Download, LogOut, MonitorSmartphone, RefreshCw, Trash2, Upload } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
@@ -7,7 +8,8 @@ import { useData } from "../stores/data";
 import { DEFAULT_SETTINGS, useSettings } from "../stores/settings";
 import { confirmDialog, toast } from "../stores/ui";
 import { TERMINAL_THEMES } from "../terminal/themes";
-import type { Device } from "../lib/types";
+import type { Device, UpdateInfo } from "../lib/types";
+import { openRelease } from "../lib/updates";
 import { Badge, Button, Field, Input, Select, Switch } from "../components/ui";
 import { cn, timeAgo } from "../lib/utils";
 
@@ -365,6 +367,60 @@ function DataSection() {
   );
 }
 
+function UpdatesSection() {
+  const enabled = useSettings((s) => s.settings.checkUpdates);
+  const update = useSettings((s) => s.update);
+  const [version, setVersion] = useState<string | null>(null);
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void getVersion().then(setVersion).catch(() => setVersion(null));
+  }, []);
+
+  const check = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setInfo(await api.updateCheck());
+    } catch (e) {
+      setInfo(null);
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Updates" description={version ? `Termindo ${version}` : undefined}>
+      <Switch
+        checked={enabled}
+        onChange={(v) => update({ checkUpdates: v })}
+        label="Check for updates automatically"
+        hint="Looks for a new release on startup and every few hours. Nothing is installed automatically."
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => void check()} loading={busy}>
+          <RefreshCw size={14} /> Check now
+        </Button>
+        {info && !info.available && <span className="text-xs text-muted">You're on the latest version ({info.current}).</span>}
+        {info?.available && (
+          <>
+            <span className="text-xs">
+              Version <b>{info.latest}</b> is available.
+            </span>
+            <Button variant="primary" size="sm" onClick={() => openRelease(info)}>
+              <Download size={14} /> Download
+            </Button>
+          </>
+        )}
+        {error && <span className="text-xs text-danger">Could not check: {error}</span>}
+      </div>
+    </Section>
+  );
+}
+
 export function SettingsView() {
   const { settings, update } = useSettings();
   return (
@@ -419,6 +475,7 @@ export function SettingsView() {
       <SecuritySection />
       <AccountSection />
       <DataSection />
+      <UpdatesSection />
 
       <Section title="Keyboard shortcuts">
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
@@ -442,7 +499,6 @@ export function SettingsView() {
           ))}
         </div>
       </Section>
-      <p className="pb-4 text-center text-[11px] text-muted">Termindo 0.1.0</p>
     </div>
   );
 }

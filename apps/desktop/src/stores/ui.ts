@@ -4,10 +4,22 @@ import type { PromptEvent } from "../lib/types";
 
 export type View = "hosts" | "snippets" | "keychain" | "knownHosts" | "history" | "settings";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+export interface ToastOptions {
+  action?: ToastAction;
+  /** Stay until dismissed instead of disappearing after a few seconds. */
+  sticky?: boolean;
+}
+
 export interface Toast {
   id: string;
   kind: "info" | "success" | "error";
   message: string;
+  action?: ToastAction;
 }
 
 /** A prompt asked by the UI itself (password / passphrase / text input). */
@@ -39,7 +51,7 @@ interface UiStore {
   snippetPaletteOpen: boolean;
   setSnippetPaletteOpen: (open: boolean) => void;
   toasts: Toast[];
-  toast: (message: string, kind?: Toast["kind"]) => void;
+  toast: (message: string, kind?: Toast["kind"], opts?: ToastOptions) => void;
   dismissToast: (id: string) => void;
   backendPrompts: PromptEvent[];
   pushBackendPrompt: (p: PromptEvent) => void;
@@ -58,9 +70,10 @@ export const useUi = create<UiStore>((set) => ({
   snippetPaletteOpen: false,
   setSnippetPaletteOpen: (snippetPaletteOpen) => set({ snippetPaletteOpen }),
   toasts: [],
-  toast: (message, kind = "info") => {
+  toast: (message, kind = "info", opts) => {
     const id = uid();
-    set((s) => ({ toasts: [...s.toasts, { id, kind, message }] }));
+    set((s) => ({ toasts: [...s.toasts, { id, kind, message, action: opts?.action }] }));
+    if (opts?.sticky) return;
     setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" ? 7000 : 3500);
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -73,7 +86,7 @@ export const useUi = create<UiStore>((set) => ({
   closeConfirm: (id) => set((s) => ({ confirmPrompts: s.confirmPrompts.filter((p) => p.id !== id) })),
 }));
 
-export const toast = (message: string, kind?: Toast["kind"]) => useUi.getState().toast(message, kind);
+export const toast = (message: string, kind?: Toast["kind"], opts?: ToastOptions) => useUi.getState().toast(message, kind, opts);
 
 /** Ask the user for a value. Resolves to `null` when cancelled. */
 export function promptInput(opts: Omit<InputPrompt, "id" | "resolve">): Promise<string | null> {

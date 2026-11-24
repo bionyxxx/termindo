@@ -6,6 +6,7 @@ import { useSettings } from "./stores/settings";
 import { toast, useUi } from "./stores/ui";
 import { useTransfers } from "./stores/transfers";
 import { findSession } from "./terminal/registry";
+import { checkForUpdates } from "./lib/updates";
 import type { PromptEvent, SyncStatus, TransferInfo } from "./lib/types";
 import { LockScreen } from "./views/LockScreen";
 import { Workspace } from "./views/Workspace";
@@ -67,11 +68,27 @@ function useAutoLock() {
   }, [minutes, phase]);
 }
 
+/** Looks for a new release shortly after startup, then every few hours. */
+function useUpdateCheck() {
+  const loaded = useSettings((s) => s.loaded);
+  const enabled = useSettings((s) => s.settings.checkUpdates);
+  useEffect(() => {
+    if (!loaded || !enabled) return;
+    const first = setTimeout(() => void checkForUpdates(), 5_000);
+    const every = setInterval(() => void checkForUpdates(), 6 * 60 * 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, [loaded, enabled]);
+}
+
 export function App() {
   const phase = useApp((s) => s.phase);
   useAppTheme();
   useBackendEvents();
   useAutoLock();
+  useUpdateCheck();
 
   useEffect(() => {
     void (async () => {

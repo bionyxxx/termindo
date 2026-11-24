@@ -21,7 +21,20 @@ export function Toaster() {
           ) : (
             <Info size={16} className="mt-0.5 shrink-0 text-accent" />
           )}
-          <span className="selectable min-w-0 flex-1 break-words">{t.message}</span>
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+            <span className="selectable break-words">{t.message}</span>
+            {t.action && (
+              <button
+                className="text-xs font-medium text-accent hover:underline"
+                onClick={() => {
+                  t.action!.onClick();
+                  dismissToast(t.id);
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
+          </div>
           <button className="text-muted hover:text-fg" onClick={() => dismissToast(t.id)}>
             <X size={14} />
           </button>
