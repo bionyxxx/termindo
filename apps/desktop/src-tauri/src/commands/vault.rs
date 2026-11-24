@@ -8,6 +8,7 @@ use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 use crate::sync;
 
+// Kept from the original bundle identifier so existing keychain entries keep working.
 const KEYCHAIN_SERVICE: &str = "dev.termindo.app";
 const KEYCHAIN_USER: &str = "vault-keys";
 const CHECK_KEY: &str = "vault_check";
