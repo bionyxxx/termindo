@@ -62,6 +62,9 @@ jobs:
         run: npm ci
       - name: Build installers
         working-directory: apps/desktop
+        env:
+          # Default sync server shown in the app (Settings → Variables → TERMINDO_SYNC_URL).
+          VITE_DEFAULT_SYNC_URL: ${{ vars.TERMINDO_SYNC_URL }}
         run: npx tauri build ${{ matrix.args }}
       - name: Upload installers
         uses: actions/upload-artifact@v4

@@ -80,16 +80,16 @@ shows "More info → Run anyway".
 
 Local build: `cd apps/desktop && npx tauri build` (output in `target/release/bundle/`).
 
-## Self-hosting sync
-See [docs/sync-protocol.md](docs/sync-protocol.md) and `deploy/docker-compose.yml`:
+## Sync (private cloud)
+Sync is optional and end-to-end encrypted. Run the sync server on your own VPS with
+Docker (Postgres + server + Caddy HTTPS + daily backups): see
+**[docs/deploy-vps.md](docs/deploy-vps.md)**. Client devices only need the installer.
 
-```bash
-cd deploy
-cp .env.example .env   # set TERMINDO_JWT_SECRET and POSTGRES_PASSWORD
-docker compose up -d   # server on :8080 (add --profile tls for Caddy + HTTPS)
-```
-
-Then in Termindo: Settings → Sync account → server URL → Create account.
+- The server image is published to `ghcr.io/bionyxxx/termindo-server` by the
+  **Server image** workflow.
+- Set the repository variable `TERMINDO_SYNC_URL` (e.g. `https://sync.example.com`) and
+  release installers come preconfigured with that server.
+- Protocol and crypto details: [docs/sync-protocol.md](docs/sync-protocol.md).
 
 ## Security
 See [docs/security.md](docs/security.md).

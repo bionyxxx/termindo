@@ -5,3 +5,4 @@ dist/
 .env
 .claude/settings.local.json
 apps/desktop/src-tauri/gen/schemas
+*.tsbuildinfo
