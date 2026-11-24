@@ -1,7 +1,7 @@
 # PLAN.md — Termindo
 
 > Aplikasi SSH client desktop setara Termius.
-> Status: **Perencanaan — belum diimplementasi.**
+> Status: **Implementasi awal F1–F5 selesai, build & test lulus** (lihat §9).
 > Terakhir diperbarui: 2026-11-24
 
 ---
@@ -199,8 +199,8 @@ Prinsip: **offline-first** — semua operasi terhadap SQLite lokal, sync berjala
 
 ## 7. Keputusan yang masih terbuka
 
-- [ ] Konfirmasi final frontend: **React + TS** (rekomendasi) vs Leptos/WASM (100% Rust).
-- [ ] SQLite driver: `rusqlite` (sync, sederhana) vs `sqlx` (async, konsisten dengan server).
+- [x] Frontend: **React + TS** (xterm.js, Tailwind 4, Radix, zustand).
+- [x] SQLite driver: **`rusqlite`** (bundled) di desktop; `sqlx` + Postgres di server.
 - [ ] Nama final produk & bundle identifier.
 - [ ] Kebijakan akun: wajib login untuk sync vs mode lokal-tanpa-akun (saat ini: keduanya didukung).
 - [ ] Target minimum OS (mis. Windows 10+, macOS 12+, Ubuntu 22.04+).
@@ -213,3 +213,32 @@ Prinsip: **offline-first** — semua operasi terhadap SQLite lokal, sync berjala
 - xterm.js: <https://xtermjs.org>
 - russh (SSH client pure Rust): <https://crates.io/crates/russh>
 - Model keamanan serupa: Bitwarden security whitepaper (zero-knowledge), Termius vault.
+
+---
+
+## 9. Status implementasi (2026-11-24)
+
+| Fase | Status | Catatan |
+|---|---|---|
+| F1 Fondasi | ✅ ditulis | Workspace, Tauri shell, skema SQLite + migrasi, vault (Argon2id/HKDF/XChaCha20-Poly1305), recovery key, OS keychain unlock, CI |
+| F2 SSH core | ✅ ditulis | russh 0.65: password, key (+passphrase), agent, keyboard-interactive, ProxyJump; TOFU host key; PTY shell; xterm.js via raw IPC channel |
+| F3 Workspace UX | ✅ ditulis | Tabs (drag), split pane, broadcast input, restore sesi, host/grup/tag, command palette, snippet + placeholder, import ~/.ssh/config, JSON/CSV backup, riwayat |
+| F4 SFTP | ✅ ditulis | Dual pane, drag & drop (termasuk dari file manager), queue + prioritas, pause/resume/retry, edit remote, chmod/rename/delete |
+| F5 Sync & akun | ✅ ditulis | Server Axum + Postgres, JWT + refresh rotation, E2E record envelope, LWW + tombstone, device management, recovery |
+| F6 Polish & rilis | ⏳ | Port forwarding, updater, signing, QA lintas OS |
+
+**Penyimpangan dari rencana awal:**
+- Tabel `keypairs` digabung ke `credentials` (kind `private_key` + kolom `public_key`).
+- TanStack Query tidak dipakai; zustand cukup untuk data lokal.
+- Password akun sync = master password (model Bitwarden): server hanya menerima `auth_hash` turunan HKDF.
+- `known_hosts.id` deterministik (`kh:<host>:<port>`) supaya device konvergen.
+- Konflik LWW berbasis `updated_at`; versi sama = idempotent (tidak ada tie-break konten).
+
+**Verifikasi (2026-11-24):**
+- `cargo build` + `cargo clippy --workspace --all-targets -D warnings` + `cargo fmt`: bersih.
+- `cargo test --workspace`: semua lulus, termasuk integrasi SSH terhadap OpenSSH di Docker
+  (password, public key, password salah, PTY resize, exit status, SFTP resume dua arah, chmod/rename/hapus rekursif)
+  dan integrasi server terhadap Postgres (register/login/push/pull/konflik/revoke/refresh reuse/ganti password/recovery).
+- Frontend: `tsc`, `vitest`, `vite build` lulus; 73 command IPC dicek cocok nama & argumennya dengan Rust.
+- App desktop jalan (`npm run tauri dev`): migrasi DB OK, tanpa panic.
+- **Belum diuji:** alur UI di dalam jendela (klik-klik) — butuh uji manual atau `webkit2gtk-driver` untuk e2e.

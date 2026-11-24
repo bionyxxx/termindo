@@ -1,0 +1,22 @@
+[package]
+name = "termindo-sync"
+description = "Termindo sync: wire protocol, end-to-end encrypted record envelopes and the sync engine"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["client"]
+# HTTP client + sync engine (desktop). The server only needs the protocol types.
+client = ["dep:reqwest", "dep:tokio"]
+
+[dependencies]
+termindo-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+reqwest = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio.workspace = true

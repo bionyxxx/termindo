@@ -1,0 +1,32 @@
+[package]
+name = "termindo-desktop"
+description = "Termindo desktop app (Tauri 2)"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "termindo_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+termindo-core.workspace = true
+termindo-ssh.workspace = true
+termindo-sync = { workspace = true, features = ["client"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-single-instance = "2"
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+uuid.workspace = true
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+dirs = "6"

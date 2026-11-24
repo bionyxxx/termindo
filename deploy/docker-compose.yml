@@ -1,0 +1,60 @@
+# Self-hosted Termindo sync server.
+#
+#   cd deploy
+#   cp .env.example .env        # then set TERMINDO_JWT_SECRET and POSTGRES_PASSWORD
+#   docker compose up -d --build                 # plain HTTP on :8080 (use behind your own proxy)
+#   docker compose --profile tls up -d --build   # + Caddy with automatic HTTPS for TERMINDO_DOMAIN
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: termindo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: termindo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U termindo -d termindo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile
+    image: termindo-server:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://termindo:${POSTGRES_PASSWORD}@postgres:5432/termindo
+      TERMINDO_JWT_SECRET: ${TERMINDO_JWT_SECRET:?set TERMINDO_JWT_SECRET in .env (>= 32 chars)}
+      TERMINDO_ALLOW_REGISTRATION: ${TERMINDO_ALLOW_REGISTRATION:-true}
+      TERMINDO_TRUST_PROXY: ${TERMINDO_TRUST_PROXY:-false}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${TERMINDO_PORT:-8080}:8080"
+
+  caddy:
+    image: caddy:2
+    profiles: ["tls"]
+    restart: unless-stopped
+    depends_on: [server]
+    environment:
+      TERMINDO_DOMAIN: ${TERMINDO_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

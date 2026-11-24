@@ -1,0 +1,34 @@
+[package]
+name = "termindo-server"
+description = "Termindo sync server: stores end-to-end encrypted records, never sees plaintext"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "termindo_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "termindo-server"
+path = "src/main.rs"
+
+[dependencies]
+termindo-core.workspace = true
+termindo-sync.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rand.workspace = true
+sha2.workspace = true
+argon2.workspace = true
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "derive", "migrate"] }
+jsonwebtoken = "9"
+hmac = "0.12"
+
+[dev-dependencies]
+termindo-sync = { workspace = true, features = ["client"] }
