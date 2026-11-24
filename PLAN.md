@@ -70,7 +70,7 @@ koneksi SSH ke banyak server, dengan fitur utama:
 
 | Alternatif | Konsekuensi |
 |---|---|
-| **100% Rust** (egui/iced + `alacritty_terminal`) | Tanpa TS sama sekali, tapi harus menulis rendering teks GPU, IME, selection sendiri → ~3–4× lebih lama |
+| **100% Rust** (egui/iced + `alacritty_terminal`) | Tanpa TS sama sekali, tapi harus menulis rendering teks GPU, IME, selection sendiri → jauh lebih banyak pekerjaan untuk hasil yang sama |
 | **Leptos/WASM di dalam Tauri** | Bahasa tetap Rust, tapi interop ke xterm.js lebih gesekan, ekosistem lebih muda |
 | `ssh2` (libssh2 binding) | Matang tapi blocking & butuh C toolchain; `russh` dipilih karena pure Rust + async |
 
@@ -173,16 +173,14 @@ Prinsip: **offline-first** — semua operasi terhadap SQLite lokal, sync berjala
 
 ## 5. Roadmap / Fase
 
-| Fase | Isi | Estimasi |
-|---|---|---|
-| **F1 — Fondasi** | Workspace repo, shell Tauri, skema SQLite, vault + master password, CI dasar | 1–2 minggu |
-| **F2 — SSH core** | Koneksi `russh`, auth password & key, terminal tab pertama (xterm.js ↔ channel) | 2–3 minggu |
-| **F3 — Workspace UX** | Multi-tab, split pane, host manager, snippets, import OpenSSH | 2 minggu |
-| **F4 — SFTP** | File browser, transfer dengan progress/resume, edit remote | 2–3 minggu |
-| **F5 — Sync & akun** | Axum server, JWT auth, E2E encrypted sync, device management | 3 minggu |
-| **F6 — Polish & rilis** | Known-hosts UI, ProxyJump, port forwarding (opsional), packaging, auto-update | 2 minggu |
-
-> Estimasi kasar untuk 1–2 developer paruh waktu; bukan komitmen.
+| Fase | Isi |
+|---|---|
+| **F1 — Fondasi** | Workspace repo, shell Tauri, skema SQLite, vault + master password, CI dasar |
+| **F2 — SSH core** | Koneksi `russh`, auth password & key, terminal tab pertama (xterm.js ↔ channel) |
+| **F3 — Workspace UX** | Multi-tab, split pane, host manager, snippets, import OpenSSH |
+| **F4 — SFTP** | File browser, transfer dengan progress/resume, edit remote |
+| **F5 — Sync & akun** | Axum server, JWT auth, E2E encrypted sync, device management |
+| **F6 — Polish & rilis** | Known-hosts UI, ProxyJump, port forwarding (opsional), packaging, auto-update |
 
 ---
 
