@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use tauri::Manager;
 use termindo_core::db::Db;
 
-use crate::commands::{account, data, sftp, ssh, vault};
+use crate::commands::{account, data, sftp, ssh, update, vault};
 use crate::state::AppState;
 
 fn data_dir(app: &tauri::App) -> PathBuf {
@@ -179,6 +179,8 @@ pub fn run() {
             account::account_devices,
             account::account_revoke_device,
             account::sync_now,
+            // updates
+            update::update_check,
             frontend_log,
         ])
         .run(tauri::generate_context!())

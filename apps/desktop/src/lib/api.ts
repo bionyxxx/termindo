@@ -119,6 +119,9 @@ export const api = {
   accountDevices: () => invoke<T.Device[]>("account_devices"),
   accountRevokeDevice: (id: string) => invoke<void>("account_revoke_device", { id }),
   syncNow: () => invoke<T.SyncReport | null>("sync_now"),
+
+  // updates
+  updateCheck: () => invoke<T.UpdateInfo>("update_check"),
 };
 
 export { Channel };

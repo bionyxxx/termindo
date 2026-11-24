@@ -65,6 +65,9 @@ jobs:
         env:
           # Default sync server shown in the app (Settings → Variables → TERMINDO_SYNC_URL).
           VITE_DEFAULT_SYNC_URL: ${{ vars.TERMINDO_SYNC_URL }}
+          # Release endpoint for the update check (GitHub "latest release" JSON).
+          # Empty = api.github.com/repos/bionyxxx/termindo/releases/latest.
+          TERMINDO_UPDATE_URL: ${{ vars.TERMINDO_UPDATE_URL }}
         run: npx tauri build ${{ matrix.args }}
       - name: Upload installers
         uses: actions/upload-artifact@v4
