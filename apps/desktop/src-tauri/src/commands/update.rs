@@ -1,7 +1,8 @@
 //! Update check: compares the running version with the latest published release.
 //!
-//! This only *reports* a newer version; installing it is left to the user
-//! (the release page has the installers).
+//! `update_check` only *reports* a newer version. Installing it in-app is done by
+//! `tauri-plugin-updater` from the frontend; `update_mode` tells the UI whether
+//! that is possible for this installation or the user must download it manually.
 
 use std::time::Duration;
 
@@ -104,6 +105,31 @@ pub async fn update_check(app: AppHandle) -> CmdResult<UpdateInfo> {
     })
 }
 
+/// How this installation receives updates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateMode {
+    /// Download, verify and install in-app (tauri-plugin-updater).
+    Auto,
+    /// Only notify; the user installs from the release page.
+    Manual,
+}
+
+/// Linux `.deb`/`.rpm` installs are owned by the package manager, so they are
+/// updated manually. Only the AppImage (which sets `APPIMAGE`) self-updates.
+fn decide_mode(os: &str, appimage: bool) -> UpdateMode {
+    if os == "linux" && !appimage {
+        UpdateMode::Manual
+    } else {
+        UpdateMode::Auto
+    }
+}
+
+#[tauri::command]
+pub fn update_mode() -> UpdateMode {
+    decide_mode(std::env::consts::OS, std::env::var_os("APPIMAGE").is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +156,13 @@ mod tests {
         assert!(!is_newer(&v("0.1.0"), &v("0.1.1")));
         assert!(!is_newer(&v("1.0.0-rc.1"), &v("1.0.0")));
         assert!(is_newer(&v("1.0.0"), &v("1.0.0-rc.1")));
+    }
+
+    #[test]
+    fn decides_update_mode() {
+        assert_eq!(decide_mode("linux", false), UpdateMode::Manual);
+        assert_eq!(decide_mode("linux", true), UpdateMode::Auto);
+        assert_eq!(decide_mode("windows", false), UpdateMode::Auto);
+        assert_eq!(decide_mode("macos", false), UpdateMode::Auto);
     }
 }

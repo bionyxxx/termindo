@@ -4,7 +4,21 @@ name: Installers
 # - Manual run (Actions tab / `gh workflow run bundle.yml`) or a change to this
 #   workflow / the Tauri config: installers are uploaded as workflow artifacts.
 # - Tag `v*` (e.g. `git tag v0.1.0 && git push --tags`): additionally creates a
-#   draft GitHub release with all installers attached.
+#   draft GitHub release with all installers attached, plus `latest.json` for the
+#   in-app updater (tauri-plugin-updater).
+#
+# In-app updates:
+# - Tag builds pass `--config src-tauri/tauri.updater.conf.json`, which turns on
+#   `bundle.createUpdaterArtifacts`. Tauri then signs the AppImage, MSI and NSIS
+#   installers and the macOS `.app.tar.gz` with the minisign key from the secrets
+#   TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD, writing `*.sig`.
+#   PR and manual builds skip this, so they pass without access to the secrets.
+# - The `release` job runs scripts/make-latest-json.mjs, which fails if any platform
+#   lacks a signature, and attaches `latest.json`. The app reads it from
+#   releases/latest/download/latest.json, so users see an update only once the
+#   draft is published.
+# - The public key lives in tauri.conf.json (plugins.updater.pubkey). Losing the
+#   private key means installed versions can no longer be updated in-app.
 on:
   push:
     tags: ["v*"]
@@ -12,6 +26,7 @@ on:
     paths:
       - ".github/workflows/bundle.yml"
       - "apps/desktop/src-tauri/tauri.conf.json"
+      - "apps/desktop/src-tauri/tauri.updater.conf.json"
   workflow_dispatch:
 
 concurrency:
@@ -60,6 +75,18 @@ jobs:
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
+      - name: Check updater signing setup
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set"; exit 1
+          fi
+          if grep -q REPLACE_WITH_UPDATER_PUBKEY apps/desktop/src-tauri/tauri.conf.json; then
+            echo "::error::plugins.updater.pubkey in tauri.conf.json is still a placeholder"; exit 1
+          fi
       - name: Build installers
         working-directory: apps/desktop
         env:
@@ -68,7 +95,10 @@ jobs:
           # Release endpoint for the update check (GitHub "latest release" JSON).
           # Empty = api.github.com/repos/bionyxxx/termindo/releases/latest.
           TERMINDO_UPDATE_URL: ${{ vars.TERMINDO_UPDATE_URL }}
-        run: npx tauri build ${{ matrix.args }}
+          # Updater signing key (tag builds only, see the top of this file).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build ${{ matrix.args }} ${{ startsWith(github.ref, 'refs/tags/v') && '--config src-tauri/tauri.updater.conf.json' || '' }}
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
@@ -78,9 +108,14 @@ jobs:
             target/**/release/bundle/deb/*.deb
             target/**/release/bundle/rpm/*.rpm
             target/**/release/bundle/appimage/*.AppImage
+            target/**/release/bundle/appimage/*.AppImage.sig
             target/**/release/bundle/dmg/*.dmg
+            target/**/release/bundle/macos/*.app.tar.gz
+            target/**/release/bundle/macos/*.app.tar.gz.sig
             target/**/release/bundle/msi/*.msi
+            target/**/release/bundle/msi/*.msi.sig
             target/**/release/bundle/nsis/*.exe
+            target/**/release/bundle/nsis/*.exe.sig
 
   release:
     name: Draft GitHub release
@@ -90,10 +125,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - name: Build latest.json
+        # Fails when a platform has no signature, so no release ships a partial manifest.
+        run: |
+          node scripts/make-latest-json.mjs dist "${GITHUB_REF_NAME}" dist/latest.json
+          cat dist/latest.json
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}

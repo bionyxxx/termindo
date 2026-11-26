@@ -255,6 +255,9 @@ export type PromptEvent =
     }
   | { id: string; kind: "keyboardInteractive"; label: string; request: KbdRequest };
 
+/** `auto`: installed in-app by the updater plugin. `manual`: Linux .deb/.rpm, download from the release page. */
+export type UpdateMode = "auto" | "manual";
+
 export interface UpdateInfo {
   current: string;
   latest: string;

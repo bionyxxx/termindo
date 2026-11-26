@@ -1,15 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ArrowLeftRight, Cloud, Download, FileInput, FileOutput, Keyboard, KeyRound, LogOut, MonitorSmartphone, Palette, RefreshCw, Shield, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Cloud, Download, FileInput, FileOutput, Keyboard, KeyRound, LogOut, MonitorSmartphone, Palette, RefreshCw, RotateCw, Shield, SquareTerminal, Trash2 } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useApp } from "../stores/app";
 import { useData } from "../stores/data";
 import { DEFAULT_SETTINGS, useSettings } from "../stores/settings";
 import { confirmDialog, toast } from "../stores/ui";
 import { TERMINAL_THEMES } from "../terminal/themes";
-import type { Device, UpdateInfo } from "../lib/types";
-import { openRelease } from "../lib/updates";
+import type { Device } from "../lib/types";
+import { findUpdate, installUpdate, openRelease, updateMode, useUpdates } from "../lib/updates";
 import { Badge, Button, Caption, Dialog, Field, Input, Kbd, Select, StatusPill, Switch } from "../components/ui";
 import { cn, isMac, timeAgo } from "../lib/utils";
 
@@ -445,45 +445,74 @@ function DataSection() {
 function UpdatesSection() {
   const enabled = useSettings((s) => s.settings.checkUpdates);
   const update = useSettings((s) => s.update);
+  const { mode, found, phase, progress } = useUpdates();
   const [version, setVersion] = useState<string | null>(null);
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void getVersion().then(setVersion).catch(() => setVersion(null));
+    void updateMode();
   }, []);
 
   const check = async () => {
     setBusy(true);
     setError(null);
     try {
-      setInfo(await api.updateCheck());
+      await findUpdate();
     } catch (e) {
-      setInfo(null);
+      useUpdates.setState({ found: null });
       setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
 
-  const status = info?.available ? `${info.latest} available` : info ? "latest" : null;
+  const installing = phase !== "idle";
+  const status = found?.available ? `${found.latest} available` : found ? "latest" : null;
+  const notes = found?.notes ? (found.notes.length > 400 ? `${found.notes.slice(0, 400).trimEnd()}…` : found.notes) : null;
+  const pct = progress === null ? null : Math.round(progress * 100);
+  const phaseLabel =
+    phase === "downloading" ? `Downloading…${pct === null ? "" : ` ${pct}%`}` : phase === "installing" ? "Installing…" : "Restarting…";
   return (
     <Section id="updates" title="Updates" description={version ? `Termindo ${version}${status ? ` · ${status}` : ""}` : undefined}>
-      <Row label="Check for updates automatically" hint="Looks at GitHub Releases every few hours">
-        <Button onClick={() => void check()} loading={busy}>
+      <Row
+        label="Check for updates automatically"
+        hint={mode === "manual" ? "Looks at GitHub Releases every few hours. .deb/.rpm packages are updated manually" : "Looks at GitHub Releases every few hours"}
+      >
+        <Button onClick={() => void check()} loading={busy} disabled={installing}>
           {!busy && <RefreshCw size={16} />} Check now
         </Button>
         <Switch checked={enabled} onChange={(v) => update({ checkUpdates: v })} />
       </Row>
-      {info?.available && (
-        <div className="flex items-center gap-3 rounded-lg bg-accent/12 px-3.5 py-2.5 text-[13px] text-fg">
-          <span className="flex-1">
-            Version <b>{info.latest}</b> is available.
-          </span>
-          <Button variant="primary" size="sm" onClick={() => openRelease(info)}>
-            <Download size={16} /> Download
-          </Button>
+      {found?.available && (
+        <div className="flex flex-col gap-2 rounded-lg bg-accent/12 px-3.5 py-2.5 text-[13px] text-fg">
+          <div className="flex items-center gap-3">
+            <span className="flex-1">
+              Version <b>{found.latest}</b> is available.
+            </span>
+            {found.update ? (
+              <Button variant="primary" size="sm" loading={installing} onClick={() => void installUpdate(found.update!)}>
+                {installing ? (
+                  phaseLabel
+                ) : (
+                  <>
+                    <RotateCw size={16} /> Update &amp; restart
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button variant="primary" size="sm" onClick={() => openRelease(found)}>
+                <Download size={16} /> Download
+              </Button>
+            )}
+          </div>
+          {installing && phase === "downloading" && (
+            <div className="h-1 overflow-hidden rounded-full bg-line">
+              <div className="h-full bg-accent transition-[width]" style={{ width: `${pct ?? 100}%` }} />
+            </div>
+          )}
+          {notes && <p className="selectable max-h-32 overflow-auto whitespace-pre-wrap text-xs text-fg-2">{notes}</p>}
         </div>
       )}
       {error && <span className="text-xs text-danger">Could not check: {error}</span>}
