@@ -80,6 +80,24 @@ shows "More info → Run anyway".
 
 Local build: `cd apps/desktop && npx tauri build` (output in `target/release/bundle/`).
 
+### In-app updates
+Windows, macOS and the Linux AppImage update themselves from **Settings → Updates** (or the
+toast) with **Update & restart**. `.deb`/`.rpm` installs only get a notice and a link to
+the release page. Nothing is installed until the user presses the button.
+
+- Tag builds sign the updater bundles (`*.sig`) with a minisign key from the repository
+  secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The
+  matching public key is `plugins.updater.pubkey` in `tauri.conf.json`. Generate the pair
+  once with `npx tauri signer generate -w ~/.tauri/termindo-updater.key`. **If the private
+  key is lost, installed versions can no longer update in-app** and must be reinstalled by
+  hand.
+- The release job builds `latest.json` with `scripts/make-latest-json.mjs`. If a platform
+  has no signature, the job fails. The app reads
+  `releases/latest/download/latest.json`, so an update is visible only after the draft
+  release is published.
+- To test locally, build with a throwaway key:
+  `TAURI_SIGNING_PRIVATE_KEY="$(cat test.key)" npx tauri build --config src-tauri/tauri.updater.conf.json`.
+
 ## Sync (private cloud)
 Sync is optional and end-to-end encrypted. Run the sync server on your own VPS with
 Docker (Postgres + server + Caddy HTTPS + daily backups): see

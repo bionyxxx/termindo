@@ -89,6 +89,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let dir = data_dir(app);
             std::fs::create_dir_all(&dir)?;
@@ -181,6 +183,7 @@ pub fn run() {
             account::sync_now,
             // updates
             update::update_check,
+            update::update_mode,
             frontend_log,
         ])
         .run(tauri::generate_context!())

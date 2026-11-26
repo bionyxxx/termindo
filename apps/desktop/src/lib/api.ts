@@ -122,6 +122,7 @@ export const api = {
 
   // updates
   updateCheck: () => invoke<T.UpdateInfo>("update_check"),
+  updateMode: () => invoke<T.UpdateMode>("update_mode"),
 };
 
 export { Channel };

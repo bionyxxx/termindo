@@ -54,7 +54,10 @@ interface UiStore {
   snippetPaletteOpen: boolean;
   setSnippetPaletteOpen: (open: boolean) => void;
   toasts: Toast[];
-  toast: (message: string, kind?: Toast["kind"], opts?: ToastOptions) => void;
+  /** Shows a toast and returns its id. */
+  toast: (message: string, kind?: Toast["kind"], opts?: ToastOptions) => string;
+  /** Changes a toast that is still on screen (e.g. progress text). */
+  updateToast: (id: string, patch: Partial<Omit<Toast, "id">>) => void;
   dismissToast: (id: string) => void;
   backendPrompts: PromptEvent[];
   pushBackendPrompt: (p: PromptEvent) => void;
@@ -78,9 +81,10 @@ export const useUi = create<UiStore>((set) => ({
   toast: (message, kind = "info", opts) => {
     const id = uid();
     set((s) => ({ toasts: [...s.toasts, { id, kind, message, action: opts?.action }] }));
-    if (opts?.sticky) return;
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" ? 7000 : 3500);
+    if (!opts?.sticky) setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" ? 7000 : 3500);
+    return id;
   },
+  updateToast: (id, patch) => set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   backendPrompts: [],
   pushBackendPrompt: (p) => set((s) => ({ backendPrompts: [...s.backendPrompts, p] })),
