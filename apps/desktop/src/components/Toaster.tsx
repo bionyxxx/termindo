@@ -10,7 +10,7 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "pointer-events-auto flex items-start gap-2 rounded-lg border bg-panel px-3 py-2.5 text-[13px] shadow-xl",
+            "pointer-events-auto flex items-start gap-2.5 rounded-[10px] border bg-panel-2 px-3.5 py-3 text-[13px] text-fg shadow-xl",
             t.kind === "error" ? "border-danger/40" : t.kind === "success" ? "border-ok/40" : "border-line",
           )}
         >

@@ -11,7 +11,7 @@ import { Button, Dialog, Field, Input, Switch } from "./ui";
 
 type Scope = "pane" | "tab" | "all";
 
-function RunDialog({ snippet, onClose }: { snippet: Snippet; onClose: () => void }) {
+export function RunDialog({ snippet, onClose }: { snippet: Snippet; onClose: () => void }) {
   const vars = customPlaceholders(snippet.body);
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(vars.map((v) => [v, ""])));
   const [scope, setScope] = useState<Scope>("pane");
@@ -58,19 +58,19 @@ function RunDialog({ snippet, onClose }: { snippet: Snippet; onClose: () => void
           void run();
         }}
       >
-        <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-md bg-bg p-2 font-mono text-[11.5px] text-muted">{snippet.body}</pre>
+        <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-bg px-3 py-2.5 font-mono text-[13px] text-fg">{snippet.body}</pre>
         {vars.map((v, i) => (
           <Field key={v} label={v}>
             <Input value={values[v]} data-autofocus={i === 0 || undefined} onChange={(e) => setValues((s) => ({ ...s, [v]: e.target.value }))} />
           </Field>
         ))}
-        <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-bg p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-[10px] bg-panel-2 p-1">
           {(["pane", "tab", "all"] as Scope[]).map((s) => (
             <button
               type="button"
               key={s}
               onClick={() => setScope(s)}
-              className={cn("rounded-md py-1.5 text-[12px]", scope === s ? "bg-accent text-accent-fg" : "text-muted hover:bg-hover")}
+              className={cn("h-8 rounded-[7px] text-[13px] font-medium", scope === s ? "bg-accent font-semibold text-accent-fg" : "text-fg-2 hover:text-fg")}
             >
               {s === "pane" ? "Active pane" : s === "tab" ? "All panes in tab" : "All sessions"}
             </button>
@@ -111,8 +111,8 @@ export function SnippetPalette() {
     <>
       <RDialog.Root open={snippetPaletteOpen} onOpenChange={setSnippetPaletteOpen}>
         <RDialog.Portal>
-          <RDialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
-          <RDialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[560px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-panel shadow-2xl outline-none">
+          <RDialog.Overlay className="fixed inset-0 z-40 bg-black/60" />
+          <RDialog.Content className="fixed left-1/2 top-[110px] z-50 w-[600px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[14px] border border-line bg-panel-2 shadow-2xl outline-none">
             <RDialog.Title className="sr-only">Snippets</RDialog.Title>
             <RDialog.Description className="sr-only">Pick a snippet to run</RDialog.Description>
             <input
@@ -128,21 +128,23 @@ export function SnippetPalette() {
                 else if (e.key === "Enter") pick(list[sel]);
               }}
               placeholder="Run snippet…"
-              className="w-full border-b border-line bg-transparent px-4 py-3.5 text-[14px] outline-none placeholder:text-muted"
+              className="h-14 w-full border-b border-line bg-transparent px-4 text-[17px] text-fg caret-accent outline-none placeholder:text-muted"
             />
-            <div className="max-h-[50vh] overflow-y-auto p-1.5">
+            <div className="max-h-[50vh] overflow-y-auto p-2">
               {list.length === 0 && <div className="px-3 py-6 text-center text-xs text-muted">No snippets. Create some in the Snippets view.</div>}
               {list.map((s, i) => (
                 <button
                   key={s.id}
                   onMouseMove={() => setSel(i)}
                   onClick={() => pick(s)}
-                  className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left", i === sel && "bg-accent/15")}
+                  className={cn("flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left", i === sel && "bg-panel-3")}
                 >
-                  <Code2 size={15} className={i === sel ? "text-accent" : "text-muted"} />
+                  <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent/12 text-accent">
+                    <Code2 size={16} />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px]">{s.name}</div>
-                    <div className="truncate font-mono text-[11px] text-muted">{s.body.split("\n")[0]}</div>
+                    <div className="truncate text-sm font-semibold text-fg">{s.name}</div>
+                    <div className="truncate font-mono text-xs text-muted">{s.body.split("\n")[0]}</div>
                   </div>
                 </button>
               ))}

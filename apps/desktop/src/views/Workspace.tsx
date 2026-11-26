@@ -1,28 +1,11 @@
 import { useEffect, useState } from "react";
-import {
-  Server,
-  Code2,
-  KeyRound,
-  ShieldCheck,
-  History,
-  Settings as SettingsIcon,
-  Lock,
-  Plus,
-  X,
-  Home,
-  FolderOpen,
-  Radio,
-  Cloud,
-  CloudOff,
-  RefreshCw,
-} from "lucide-react";
+import { Plus, X, Home, Radio } from "lucide-react";
 import { useApp } from "../stores/app";
 import { useSettings } from "../stores/settings";
-import { confirmDialog, promptInput, useUi, type View } from "../stores/ui";
+import { confirmDialog, promptInput, useUi } from "../stores/ui";
 import { HOME_TAB, layoutPaneIds, persistSession, restoreSession, useWorkspace, type Tab } from "../stores/workspace";
 import { findSession, setShortcutFilter } from "../terminal/registry";
-import { cn, isMac, timeAgo } from "../lib/utils";
-import { api, errorMessage } from "../lib/api";
+import { cn, isMac } from "../lib/utils";
 import { StatusDot } from "../components/ui";
 import { HostsView } from "./HostsView";
 import { SnippetsView } from "./SnippetsView";
@@ -34,7 +17,7 @@ import { TerminalTabView } from "../terminal/TerminalTabView";
 import { SftpView } from "../sftp/SftpView";
 import { CommandPalette } from "../components/CommandPalette";
 import { SnippetPalette } from "../components/SnippetPalette";
-import { toast } from "../stores/ui";
+import { Sidebar } from "../components/Sidebar";
 
 type Action =
   | "palette"
@@ -192,73 +175,6 @@ function useShortcuts() {
   }, []);
 }
 
-const NAV: { id: View; label: string; icon: typeof Server }[] = [
-  { id: "hosts", label: "Hosts", icon: Server },
-  { id: "snippets", label: "Snippets", icon: Code2 },
-  { id: "keychain", label: "Keychain", icon: KeyRound },
-  { id: "knownHosts", label: "Known hosts", icon: ShieldCheck },
-  { id: "history", label: "History", icon: History },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
-];
-
-function SyncIndicator() {
-  const account = useApp((s) => s.account);
-  if (!account?.signedIn) return null;
-  const st = account.status;
-  return (
-    <button
-      title={st.lastError ?? `Synced ${timeAgo(account.lastSyncedAt)}`}
-      onClick={() =>
-        void api
-          .syncNow()
-          .then(() => useApp.getState().refreshAccount())
-          .catch((e) => toast(errorMessage(e), "error"))
-      }
-      className="flex w-full flex-col items-center gap-0.5 rounded-md py-2 text-[10px] text-muted hover:bg-hover hover:text-fg"
-    >
-      {st.syncing ? (
-        <RefreshCw size={17} className="animate-spin" />
-      ) : st.lastError ? (
-        <CloudOff size={17} className="text-danger" />
-      ) : (
-        <Cloud size={17} className="text-ok" />
-      )}
-      Sync
-    </button>
-  );
-}
-
-function Sidebar() {
-  const { view, setView } = useUi();
-  return (
-    <nav className="flex w-[76px] shrink-0 flex-col items-stretch gap-1 border-r border-line bg-panel px-2 py-3">
-      {NAV.map((n) => (
-        <button
-          key={n.id}
-          onClick={() => setView(n.id)}
-          className={cn(
-            "flex flex-col items-center gap-1 rounded-md py-2 text-[10.5px] transition-colors",
-            view === n.id ? "bg-accent/15 text-accent" : "text-muted hover:bg-hover hover:text-fg",
-          )}
-        >
-          <n.icon size={18} />
-          {n.label}
-        </button>
-      ))}
-      <div className="flex-1" />
-      <SyncIndicator />
-      <button
-        onClick={() => void useApp.getState().lock()}
-        title={`Lock (${isMac ? "⌘" : "Ctrl"}+Shift+L)`}
-        className="flex flex-col items-center gap-1 rounded-md py-2 text-[10.5px] text-muted hover:bg-hover hover:text-fg"
-      >
-        <Lock size={18} />
-        Lock
-      </button>
-    </nav>
-  );
-}
-
 function TabButton({ tab }: { tab: Tab }) {
   const { activeTabId, setActiveTab, moveTab, panes, renameTab } = useWorkspace();
   const [dragOver, setDragOver] = useState(false);
@@ -300,23 +216,28 @@ function TabButton({ tab }: { tab: Tab }) {
         })
       }
       className={cn(
-        "group relative flex h-full max-w-[220px] min-w-[120px] cursor-default items-center gap-2 border-r border-line px-3 text-[12.5px]",
-        active ? "bg-bg text-fg" : "text-muted hover:bg-hover hover:text-fg",
-        dragOver && "bg-accent/10",
+        "group relative flex h-[30px] max-w-[220px] min-w-0 shrink-0 cursor-default items-center gap-2 rounded-[7px] px-3 text-[13px] font-medium transition-colors",
+        active ? "bg-panel-2 text-fg" : "text-fg-2 hover:bg-panel-2/60 hover:text-fg",
+        dragOver && "ring-1 ring-accent",
       )}
     >
-      {active && <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: tab.color || "var(--app-accent)" }} />}
-      {tab.kind === "sftp" ? <FolderOpen size={13} className="shrink-0 text-accent" /> : <StatusDot status={status} />}
-      <span className="truncate">{tab.title}</span>
+      {tab.kind === "sftp" ? (
+        <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-indigo" />
+      ) : tab.color ? (
+        <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: tab.color }} />
+      ) : (
+        <StatusDot status={status} />
+      )}
+      <span className="truncate">{tab.kind === "sftp" ? `${tab.title} · SFTP` : tab.title}</span>
       {tab.kind === "terminal" && tab.broadcast && <Radio size={12} className="shrink-0 text-warn" />}
       <button
-        className="ml-auto rounded p-0.5 opacity-0 hover:bg-hover group-hover:opacity-100"
+        className={cn("-mr-1 rounded p-0.5 text-muted hover:bg-panel-3 hover:text-fg", !active && "opacity-60 group-hover:opacity-100")}
         onClick={(e) => {
           e.stopPropagation();
           void closeTabWithConfirm(tab);
         }}
       >
-        <X size={13} />
+        <X size={14} />
       </button>
     </div>
   );
@@ -325,30 +246,31 @@ function TabButton({ tab }: { tab: Tab }) {
 function TabBar() {
   const { tabs, activeTabId, setActiveTab } = useWorkspace();
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
+  const home = activeTabId === HOME_TAB;
   return (
-    <div className="flex h-9 shrink-0 items-stretch border-b border-line bg-panel">
+    <div className="flex h-12 shrink-0 items-center gap-1.5 bg-bg px-4">
       <button
         onClick={() => setActiveTab(HOME_TAB)}
         className={cn(
-          "flex w-[76px] shrink-0 items-center justify-center gap-1.5 border-r border-line text-[12px]",
-          activeTabId === HOME_TAB ? "bg-bg text-accent" : "text-muted hover:bg-hover hover:text-fg",
+          "flex h-[30px] shrink-0 items-center gap-2 rounded-[7px] px-3 text-[13px] font-semibold transition-colors",
+          home ? "bg-panel-2 text-fg" : "text-fg-2 hover:bg-panel-2/60 hover:text-fg",
         )}
-        title="Vault"
       >
-        <Home size={14} />
+        <Home size={14} className={home ? "text-accent" : undefined} />
+        Home
       </button>
-      <div className="flex min-w-0 flex-1 overflow-x-auto">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
         {tabs.map((t) => (
           <TabButton key={t.id} tab={t} />
         ))}
-        <button
-          className="flex w-9 shrink-0 items-center justify-center text-muted hover:bg-hover hover:text-fg"
-          title={`New connection (${isMac ? "⌘" : "Ctrl"}+K)`}
-          onClick={() => setPaletteOpen(true)}
-        >
-          <Plus size={15} />
-        </button>
       </div>
+      <button
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[7px] text-muted hover:bg-panel-2 hover:text-fg"
+        title={`New connection (${isMac ? "⌘" : "Ctrl"}+K)`}
+        onClick={() => setPaletteOpen(true)}
+      >
+        <Plus size={16} />
+      </button>
     </div>
   );
 }
@@ -356,17 +278,14 @@ function TabBar() {
 function HomeView() {
   const view = useUi((s) => s.view);
   return (
-    <div className="flex min-h-0 flex-1">
-      <Sidebar />
-      <main className="min-w-0 flex-1 overflow-y-auto bg-bg">
-        {view === "hosts" && <HostsView />}
-        {view === "snippets" && <SnippetsView />}
-        {view === "keychain" && <KeychainView />}
-        {view === "knownHosts" && <KnownHostsView />}
-        {view === "history" && <HistoryView />}
-        {view === "settings" && <SettingsView />}
-      </main>
-    </div>
+    <main className="min-w-0 flex-1 overflow-y-auto bg-bg">
+      {view === "hosts" && <HostsView />}
+      {view === "snippets" && <SnippetsView />}
+      {view === "keychain" && <KeychainView />}
+      {view === "knownHosts" && <KnownHostsView />}
+      {view === "history" && <HistoryView />}
+      {view === "settings" && <SettingsView />}
+    </main>
   );
 }
 
@@ -395,7 +314,9 @@ export function Workspace() {
   }, [activeTabId]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full bg-bg">
+      {activeTabId === HOME_TAB && <Sidebar />}
+      <div className="flex min-w-0 flex-1 flex-col">
       <TabBar />
       <div className="relative flex min-h-0 flex-1">
         <div className={cn("absolute inset-0 flex", activeTabId !== HOME_TAB && "hidden")}>
@@ -406,6 +327,7 @@ export function Workspace() {
             {t.kind === "terminal" ? <TerminalTabView tab={t} /> : <SftpView tab={t} />}
           </div>
         ))}
+      </div>
       </div>
       <CommandPalette />
       <SnippetPalette />

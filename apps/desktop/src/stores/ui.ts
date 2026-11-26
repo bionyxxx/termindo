@@ -46,6 +46,9 @@ export interface ConfirmPrompt {
 interface UiStore {
   view: View;
   setView: (v: View) => void;
+  /** Group filter of the hosts view (`null` = all hosts). Shared by the sidebar and the hosts header. */
+  hostGroup: string | null;
+  setHostGroup: (id: string | null) => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   snippetPaletteOpen: boolean;
@@ -65,6 +68,8 @@ interface UiStore {
 export const useUi = create<UiStore>((set) => ({
   view: "hosts",
   setView: (view) => set({ view }),
+  hostGroup: null,
+  setHostGroup: (hostGroup) => set({ hostGroup }),
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   snippetPaletteOpen: false,

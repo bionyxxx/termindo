@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { Copy, Eye, FileKey, KeyRound, Lock, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import * as DM from "@radix-ui/react-dropdown-menu";
+import { Copy, Eye, FileKey, KeyRound, MoreHorizontal, Pencil, ShieldCheck, Sparkles, Trash2, Upload } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useData } from "../stores/data";
 import { confirmDialog, promptInput, toast } from "../stores/ui";
 import type { CredentialInfo, CredentialKind, KeyInspection } from "../lib/types";
-import { Badge, Button, Dialog, Empty, Field, Input, SectionTitle, Textarea } from "../components/ui";
+import { Badge, Button, Caption, Dialog, Empty, Field, Input, PageHeader, Textarea } from "../components/ui";
+
+const COLS = "grid grid-cols-[minmax(180px,1.5fr)_minmax(110px,0.8fr)_minmax(180px,1.8fr)_90px_90px_76px] items-center gap-4";
 import { cn, timeAgo } from "../lib/utils";
 
 function CredentialEditor({ cred, kind, onClose }: { cred: CredentialInfo | null; kind: CredentialKind; onClose: () => void }) {
@@ -63,7 +66,9 @@ function CredentialEditor({ cred, kind, onClose }: { cred: CredentialInfo | null
       width="max-w-xl"
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
           <Button variant="primary" onClick={() => void save()} disabled={!!(isKey && key && inspection?.error)}>
             Save
           </Button>
@@ -81,14 +86,14 @@ function CredentialEditor({ cred, kind, onClose }: { cred: CredentialInfo | null
             </Field>
             {!cred && (
               <Button onClick={() => void loadFile()} className="self-start">
-                <FileKey size={14} /> Import from file…
+                <FileKey size={16} /> Import from file…
               </Button>
             )}
             <Field label="Passphrase (if the key is encrypted)" hint="Stored encrypted in your vault so you aren't asked on every connection.">
               <Input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
             </Field>
             {inspection && (
-              <div className={cn("rounded-md border p-2 font-mono text-[11px]", inspection.error ? "border-danger/40 text-danger" : "border-ok/40 text-muted")}>
+              <div className={cn("rounded-lg px-3 py-2 font-mono text-xs", inspection.error ? "bg-danger/12 text-danger" : "bg-ok/12 text-ok")}>
                 {inspection.error ?? `${inspection.info?.algorithm} · ${inspection.info?.fingerprint}`}
               </div>
             )}
@@ -150,83 +155,113 @@ export function KeychainView() {
     }
   };
 
+  const keyType = (c: CredentialInfo) => {
+    if (c.kind === "password") return "Password";
+    const algo = c.publicKey?.split(" ")[0] ?? "";
+    return algo.replace(/^ssh-/, "").replace(/^ecdsa-sha2-/, "ecdsa-").toUpperCase() || "Private key";
+  };
+  const shortKey = (k: string) => {
+    const [algo, body] = k.split(" ");
+    if (!body) return k;
+    return `${algo} ${body.length > 24 ? `${body.slice(0, 16)}…${body.slice(-4)}` : body}`;
+  };
+  const MENU_ITEM =
+    "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-fg-2 outline-none data-[highlighted]:bg-panel-3 data-[highlighted]:text-fg";
+
   return (
-    <div className="p-5">
-      <SectionTitle
+    <div className="px-8 pb-8 pt-4">
+      <PageHeader
+        title="Keychain"
+        subtitle="Passwords and SSH keys, encrypted with your vault key"
         actions={
           <>
             <Button onClick={() => setEditing({ cred: null, kind: "password" })}>
-              <Lock size={14} /> Add password
+              <KeyRound size={16} /> Add password
             </Button>
             <Button onClick={() => setEditing({ cred: null, kind: "private_key" })}>
-              <Plus size={14} /> Add key
+              <Upload size={16} /> Import key
             </Button>
             <Button variant="primary" onClick={() => void generate()}>
-              <Sparkles size={14} /> Generate key
+              <Sparkles size={16} /> Generate key
             </Button>
           </>
         }
-      >
-        Keychain
-      </SectionTitle>
-      <p className="mb-4 text-xs text-muted">Secrets are encrypted with your vault key (XChaCha20-Poly1305) and are never synced in plaintext.</p>
+      />
+      <div className="mb-6 flex items-center gap-2.5 rounded-[10px] bg-accent/12 px-4 py-3 text-[13px] text-fg">
+        <ShieldCheck size={16} className="shrink-0 text-accent" />
+        Secrets never leave this device unencrypted — XChaCha20-Poly1305, synced end-to-end.
+      </div>
       {credentials.length === 0 ? (
-        <Empty icon={<KeyRound size={36} />} title="No credentials yet">
+        <Empty icon={<KeyRound size={22} />} title="No credentials yet">
           Generate an Ed25519 key or add existing passwords and keys.
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-line">
-          <table className="w-full text-[12.5px]">
-            <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
-              <tr>
-                <th className="px-3 py-2">Label</th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Public key</th>
-                <th className="px-3 py-2">Used by</th>
-                <th className="px-3 py-2">Updated</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {credentials.map((c) => (
-                <tr key={c.id} className="group border-t border-line bg-bg hover:bg-panel">
-                  <td className="px-3 py-2 font-medium">{c.label}</td>
-                  <td className="px-3 py-2">
-                    <Badge>{c.kind === "password" ? "password" : c.publicKey?.split(" ")[0] ?? "private key"}</Badge>
-                  </td>
-                  <td className="max-w-[280px] px-3 py-2">
-                    {c.publicKey ? (
-                      <button
-                        className="flex max-w-full items-center gap-1 truncate font-mono text-[11px] text-muted hover:text-fg"
-                        title="Copy public key"
-                        onClick={() => void writeText(c.publicKey!).then(() => toast("Public key copied", "success"))}
-                      >
-                        <Copy size={12} className="shrink-0" />
-                        <span className="truncate">{c.publicKey}</span>
-                      </button>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted">{hosts.filter((h) => h.credentialId === c.id).length} host(s)</td>
-                  <td className="px-3 py-2 text-muted">{timeAgo(c.updatedAt)}</td>
-                  <td className="px-2 py-1 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-                      <Button size="icon" variant="ghost" title="Copy secret" onClick={() => void reveal(c)}>
-                        <Eye size={14} />
+        <div className="overflow-hidden rounded-xl bg-panel">
+          <div className={`${COLS} bg-panel-2/60 px-5 py-3`}>
+            <Caption>Label</Caption>
+            <Caption>Type</Caption>
+            <Caption>Public key</Caption>
+            <Caption>Used by</Caption>
+            <Caption>Updated</Caption>
+            <span />
+          </div>
+          {credentials.map((c) => {
+            const used = hosts.filter((h) => h.credentialId === c.id).length;
+            const Icon = c.kind === "password" ? KeyRound : FileKey;
+            return (
+              <div key={c.id} className={`${COLS} border-t border-line px-5 py-3`}>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-panel-3 text-fg-2">
+                    <Icon size={14} />
+                  </span>
+                  <span className="truncate text-sm font-semibold text-fg">{c.label}</span>
+                </div>
+                <div>
+                  <Badge>{keyType(c)}</Badge>
+                </div>
+                <span className="selectable truncate font-mono text-xs text-fg-2" title={c.publicKey ?? undefined}>
+                  {c.publicKey ? shortKey(c.publicKey) : "••••••••••••"}
+                </span>
+                <span className="text-[13px] text-fg-2">
+                  {used} host{used === 1 ? "" : "s"}
+                </span>
+                <span className="text-[13px] text-fg-2">{timeAgo(c.updatedAt)}</span>
+                <div className="flex justify-end gap-1.5">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title={c.publicKey ? "Copy public key" : "Copy password"}
+                    onClick={() =>
+                      c.publicKey ? void writeText(c.publicKey).then(() => toast("Public key copied", "success")) : void reveal(c)
+                    }
+                  >
+                    <Copy size={16} />
+                  </Button>
+                  <DM.Root>
+                    <DM.Trigger asChild>
+                      <Button size="icon" variant="ghost" title="More">
+                        <MoreHorizontal size={16} />
                       </Button>
-                      <Button size="icon" variant="ghost" title="Edit" onClick={() => setEditing({ cred: c, kind: c.kind })}>
-                        <Pencil size={14} />
-                      </Button>
-                      <Button size="icon" variant="ghost" title="Delete" onClick={() => void del(c)}>
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </DM.Trigger>
+                    <DM.Portal>
+                      <DM.Content align="end" sideOffset={4} className="z-50 min-w-[180px] rounded-lg border border-line bg-panel-2 p-1 shadow-xl">
+                        <DM.Item className={MENU_ITEM} onSelect={() => void reveal(c)}>
+                          <Eye size={14} /> Copy {c.kind === "password" ? "password" : "private key"}
+                        </DM.Item>
+                        <DM.Item className={MENU_ITEM} onSelect={() => setEditing({ cred: c, kind: c.kind })}>
+                          <Pencil size={14} /> Edit
+                        </DM.Item>
+                        <DM.Separator className="my-1 h-px bg-line" />
+                        <DM.Item className={cn(MENU_ITEM, "text-danger data-[highlighted]:text-danger")} onSelect={() => void del(c)}>
+                          <Trash2 size={14} /> Delete
+                        </DM.Item>
+                      </DM.Content>
+                    </DM.Portal>
+                  </DM.Root>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       {editing && <CredentialEditor cred={editing.cred} kind={editing.kind} onClose={() => setEditing(null)} />}
