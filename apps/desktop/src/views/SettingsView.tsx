@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ArrowLeftRight, Cloud, Download, FileInput, FileOutput, Keyboard, KeyRound, LogOut, MonitorSmartphone, Palette, RefreshCw, RotateCw, Shield, SquareTerminal, Trash2 } from "lucide-react";
@@ -533,23 +533,50 @@ const SECTIONS = [
 export function SettingsView() {
   const { settings, update } = useSettings();
   const [active, setActive] = useState<string>("appearance");
+  // Set when a nav item is clicked: the programmatic scroll may stop short of
+  // the section (e.g. at the bottom of the page), so don't let scroll-spy
+  // override the explicit choice until the user scrolls by themselves.
+  const navLock = useRef(false);
+  const [spacer, setSpacer] = useState(0);
 
   // Highlight the section nearest the top of the scroll area.
   useEffect(() => {
     const root = document.getElementById("settings-appearance")?.closest("main");
     if (!root) return;
+    const unlock = () => {
+      navLock.current = false;
+    };
     const onScroll = () => {
+      if (navLock.current) return;
       const top = root.getBoundingClientRect().top;
       let current: string = SECTIONS[0].id;
       for (const s of SECTIONS) {
         const el = document.getElementById(`settings-${s.id}`);
         if (el && el.getBoundingClientRect().top - top < 120) current = s.id;
       }
-      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) current = SECTIONS[SECTIONS.length - 1].id;
       setActive(current);
     };
+    // Pad the bottom so even the last sections can scroll up to the top;
+    // otherwise the page bottoms out and scroll-spy can never reach them.
+    const last = document.getElementById(`settings-${SECTIONS[SECTIONS.length - 1].id}`);
+    const fitSpacer = () => {
+      if (!last) return;
+      // 16px scroll margin, 20px column gap, 32px bottom padding.
+      setSpacer(Math.max(0, root.clientHeight - last.offsetHeight - 16 - 20 - 32));
+    };
+    fitSpacer();
+    const ro = new ResizeObserver(fitSpacer);
+    ro.observe(root);
+    if (last) ro.observe(last);
+
+    const userEvents = ["wheel", "touchstart", "keydown", "mousedown"] as const;
     root.addEventListener("scroll", onScroll, { passive: true });
-    return () => root.removeEventListener("scroll", onScroll);
+    for (const e of userEvents) root.addEventListener(e, unlock, { passive: true });
+    return () => {
+      ro.disconnect();
+      root.removeEventListener("scroll", onScroll);
+      for (const e of userEvents) root.removeEventListener(e, unlock);
+    };
   }, []);
 
   return (
@@ -561,6 +588,7 @@ export function SettingsView() {
             <button
               key={s.id}
               onClick={() => {
+                navLock.current = true;
                 setActive(s.id);
                 document.getElementById(`settings-${s.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
@@ -662,6 +690,7 @@ export function SettingsView() {
             ))}
           </div>
         </Section>
+        <div aria-hidden style={{ height: spacer }} className="shrink-0" />
       </div>
     </div>
   );
