@@ -6742,7 +6742,7 @@ dependencies = [
 
 [[package]]
 name = "termindo-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "argon2 0.5.3",
  "base64 0.22.1",
@@ -6762,7 +6762,7 @@ dependencies = [
 
 [[package]]
 name = "termindo-desktop"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "dirs 6.0.0",
  "keyring",
@@ -6791,7 +6791,7 @@ dependencies = [
 
 [[package]]
 name = "termindo-server"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "argon2 0.5.3",
@@ -6813,7 +6813,7 @@ dependencies = [
 
 [[package]]
 name = "termindo-ssh"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "rand 0.8.8",
  "russh",
@@ -6828,7 +6828,7 @@ dependencies = [
 
 [[package]]
 name = "termindo-sync"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
