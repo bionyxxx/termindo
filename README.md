@@ -107,8 +107,9 @@ Sync is optional and end-to-end encrypted. Run the sync server on your own VPS w
 Docker (Postgres + server + Caddy HTTPS + daily backups): see
 **[docs/deploy-vps.md](docs/deploy-vps.md)**. Client devices only need the installer.
 
-- The server image is published to `ghcr.io/bionyxxx/termindo-server` by the
-  **Server image** workflow.
+- The server image is published publicly to `ghcr.io/bionyxxx/termindo-server` by the
+  **Server image** workflow (no registry login needed). Tags: `latest` (master),
+  `X.Y.Z` / `X.Y` (releases), `sha-<commit>`.
 - Set the repository variable `TERMINDO_SYNC_URL` (e.g. `https://sync.example.com`) and
   release installers come preconfigured with that server.
 - Protocol and crypto details: [docs/sync-protocol.md](docs/sync-protocol.md).
