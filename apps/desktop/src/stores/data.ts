@@ -81,3 +81,48 @@ export function emptyHost(groupId: string | null = null): Host {
 export function hostTitle(h: Pick<Host, "label" | "hostname">): string {
   return h.label || h.hostname;
 }
+
+/** `id` plus every nested sub-group id. */
+export function groupDescendants(groups: Group[], id: string): Set<string> {
+  const out = new Set<string>([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const g of groups) {
+      if (g.parentId && out.has(g.parentId) && !out.has(g.id)) {
+        out.add(g.id);
+        changed = true;
+      }
+    }
+  }
+  return out;
+}
+
+/** Number of hosts in a group, including its sub-groups. */
+export function groupHostCount(groups: Group[], hosts: Host[], id: string): number {
+  const ids = groupDescendants(groups, id);
+  return hosts.filter((h) => h.groupId && ids.has(h.groupId)).length;
+}
+
+/** Fallback colors for groups and hosts without an explicit color (Solid palette). */
+export const PALETTE = ["#f87171", "#fbbf24", "#34d399", "#22d3ee", "#6366f1", "#e879f9"];
+
+/** A group's color: its own, the nearest ancestor's, or a palette color picked by its top-level position. */
+export function groupColor(groups: Group[], id: string | null): string | null {
+  let cur = groups.find((g) => g.id === id);
+  let top = cur;
+  let guard = 0;
+  while (cur && guard++ < 20) {
+    if (cur.color) return cur.color;
+    top = cur;
+    cur = groups.find((g) => g.id === cur!.parentId);
+  }
+  if (!top) return null;
+  const tops = groups.filter((g) => !g.parentId);
+  return PALETTE[Math.max(0, tops.indexOf(top)) % PALETTE.length];
+}
+
+/** Avatar color of a host: explicit host color, then its group's color. */
+export function hostColor(groups: Group[], host: Host): string {
+  return host.options.color || groupColor(groups, host.groupId) || PALETTE[3];
+}

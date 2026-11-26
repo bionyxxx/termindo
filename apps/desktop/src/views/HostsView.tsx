@@ -1,165 +1,33 @@
 import { useMemo, useState } from "react";
+import * as DM from "@radix-ui/react-dropdown-menu";
 import * as CM from "@radix-ui/react-context-menu";
-import {
-  ChevronRight,
-  Folder,
-  FolderPlus,
-  Plus,
-  Search,
-  Server,
-  Terminal,
-  FolderOpen,
-  Pencil,
-  Copy,
-  Trash2,
-  Zap,
-  FileInput,
-  Layers,
-} from "lucide-react";
+import { Plus, Search, Server, Terminal, FolderOpen, Pencil, Copy, Trash2, FileInput, LayoutGrid, List, MoreHorizontal, Clock } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
-import { connectHost, quickConnect, sftpHost } from "../lib/actions";
+import { connectHost, sftpHost } from "../lib/actions";
 import { cn, timeAgo } from "../lib/utils";
-import { emptyHost, hostTitle, useData } from "../stores/data";
-import { confirmDialog, toast } from "../stores/ui";
-import type { Group, Host } from "../lib/types";
-import { Badge, Button, Empty, Input } from "../components/ui";
-import { GroupEditor, HostEditor } from "./HostEditor";
+import { emptyHost, groupDescendants, groupHostCount, hostColor, hostTitle, useData } from "../stores/data";
+import { confirmDialog, toast, useUi } from "../stores/ui";
+import type { Host } from "../lib/types";
+import { Badge, Button, Empty, Input, PageHeader } from "../components/ui";
+import { HostEditor } from "./HostEditor";
 
-const ALL = "__all__";
+type Layout = "grid" | "list";
+const LAYOUT_KEY = "termindo.hostsLayout";
 
-function descendants(groups: Group[], id: string): Set<string> {
-  const out = new Set<string>([id]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const g of groups) {
-      if (g.parentId && out.has(g.parentId) && !out.has(g.id)) {
-        out.add(g.id);
-        changed = true;
-      }
-    }
+function readLayout(): Layout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
   }
-  return out;
 }
 
-function GroupTree({
-  groups,
-  hosts,
-  selected,
-  onSelect,
-  onEdit,
-  onDelete,
-}: {
-  groups: Group[];
-  hosts: Host[];
-  selected: string;
-  onSelect: (id: string) => void;
-  onEdit: (g: Group) => void;
-  onDelete: (g: Group) => void;
-}) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const count = (id: string) => {
-    const ids = descendants(groups, id);
-    return hosts.filter((h) => h.groupId && ids.has(h.groupId)).length;
-  };
-  const render = (parentId: string | null, depth: number): React.ReactNode =>
-    groups
-      .filter((g) => (g.parentId ?? null) === parentId)
-      .map((g) => {
-        const hasChildren = groups.some((c) => c.parentId === g.id);
-        return (
-          <div key={g.id}>
-            <CM.Root>
-              <CM.Trigger asChild>
-                <button
-                  onClick={() => onSelect(g.id)}
-                  onDragOver={(e) => e.dataTransfer.types.includes("termindo/host") && e.preventDefault()}
-                  onDrop={(e) => {
-                    const hostId = e.dataTransfer.getData("termindo/host");
-                    const host = hosts.find((h) => h.id === hostId);
-                    if (host) void api.hostSave({ ...host, groupId: g.id }).then(() => useData.getState().loadHosts());
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[12.5px]",
-                    selected === g.id ? "bg-accent/15 text-accent" : "text-fg/90 hover:bg-hover",
-                  )}
-                  style={{ paddingLeft: 8 + depth * 14 }}
-                >
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }));
-                    }}
-                    className={cn("text-muted transition-transform", !hasChildren && "invisible", !collapsed[g.id] && "rotate-90")}
-                  >
-                    <ChevronRight size={12} />
-                  </span>
-                  <Folder size={14} style={{ color: g.color ?? undefined }} className={g.color ? "" : "text-muted"} />
-                  <span className="truncate">{g.name}</span>
-                  <span className="ml-auto text-[11px] text-muted">{count(g.id)}</span>
-                </button>
-              </CM.Trigger>
-              <CM.Portal>
-                <CM.Content className="z-50 min-w-[160px] rounded-lg border border-line bg-panel p-1 shadow-xl">
-                  <MenuItem icon={Pencil} onSelect={() => onEdit(g)}>
-                    Edit group
-                  </MenuItem>
-                  <MenuItem icon={Trash2} danger onSelect={() => onDelete(g)}>
-                    Delete group
-                  </MenuItem>
-                </CM.Content>
-              </CM.Portal>
-            </CM.Root>
-            {!collapsed[g.id] && render(g.id, depth + 1)}
-          </div>
-        );
-      });
-  return (
-    <div className="flex flex-col gap-0.5">
-      <button
-        onClick={() => onSelect(ALL)}
-        className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px]",
-          selected === ALL ? "bg-accent/15 text-accent" : "hover:bg-hover",
-        )}
-      >
-        <Layers size={14} /> All hosts <span className="ml-auto text-[11px] text-muted">{hosts.length}</span>
-      </button>
-      {render(null, 0)}
-    </div>
-  );
-}
+const MENU_ITEM =
+  "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none data-[highlighted]:bg-panel-3 data-[highlighted]:text-fg";
+const MENU = "z-50 min-w-[180px] rounded-lg border border-line bg-panel-2 p-1 text-fg-2 shadow-xl";
 
-function MenuItem({
-  icon: Icon,
-  children,
-  onSelect,
-  danger,
-}: {
-  icon: typeof Server;
-  children: React.ReactNode;
-  onSelect: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <CM.Item
-      onSelect={onSelect}
-      className={cn(
-        "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] outline-none data-[highlighted]:bg-hover",
-        danger && "text-danger",
-      )}
-    >
-      <Icon size={14} /> {children}
-    </CM.Item>
-  );
-}
-
-function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
-  const { groups, stats, credentials, loadHosts } = useData();
-  const group = groups.find((g) => g.id === host.groupId);
-  const st = stats[host.id];
-  const cred = credentials.find((c) => c.id === host.credentialId);
-  const color = host.options.color || group?.color || undefined;
+function useHostActions(host: Host, onEdit: () => void) {
+  const loadHosts = useData((s) => s.loadHosts);
   const del = async () => {
     if (!(await confirmDialog({ title: "Delete host?", message: `${hostTitle(host)} will be removed from all synced devices.`, danger: true, confirmLabel: "Delete" })))
       return;
@@ -170,96 +38,189 @@ function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
       toast(errorMessage(e), "error");
     }
   };
+  const duplicate = () =>
+    void api
+      .hostDuplicate(host.id)
+      .then(() => loadHosts())
+      .catch((e) => toast(errorMessage(e), "error"));
+  return [
+    { icon: Terminal, label: "Connect", run: () => connectHost(host) },
+    { icon: FolderOpen, label: "Open SFTP", run: () => sftpHost(host) },
+    null,
+    { icon: Pencil, label: "Edit", run: onEdit },
+    { icon: Copy, label: "Duplicate", run: duplicate },
+    { icon: Trash2, label: "Delete", run: () => void del(), danger: true },
+  ] as const;
+}
+
+/** The same actions as a right-click menu and as the "…" dropdown. */
+function HostMenu({ host, onEdit, children }: { host: Host; onEdit: () => void; children: React.ReactNode }) {
+  const items = useHostActions(host, onEdit);
   return (
     <CM.Root>
-      <CM.Trigger asChild>
-        <div
-          draggable
-          onDragStart={(e) => e.dataTransfer.setData("termindo/host", host.id)}
-          onDoubleClick={() => connectHost(host)}
-          className="group relative flex cursor-default flex-col gap-2 rounded-xl border border-line bg-panel p-3.5 transition-colors hover:border-accent/50"
-        >
-          <div className="flex items-start gap-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
-              style={{ background: color ?? "var(--app-panel-2)" }}
-            >
-              <Server size={17} className={color ? "" : "text-muted"} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{hostTitle(host)}</div>
-              <div className="truncate font-mono text-[11.5px] text-muted">
-                {host.username ? `${host.username}@` : ""}
-                {host.hostname}
-                {host.port !== 22 ? `:${host.port}` : ""}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1">
-            <Badge>{host.authType === "key" ? (cred ? `key: ${cred.label}` : "key") : host.authType}</Badge>
-            {host.jumpHostId && <Badge>via jump</Badge>}
-            {host.tags.map((t) => (
-              <Badge key={t} className="text-accent/90">
-                #{t}
-              </Badge>
-            ))}
-          </div>
-          <div className="text-[11px] text-muted">{st?.lastConnectedAt ? `Last connected ${timeAgo(st.lastConnectedAt)}` : "Never connected"}</div>
-          <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button size="icon" variant="ghost" title="SFTP" onClick={() => sftpHost(host)}>
-              <FolderOpen size={14} />
-            </Button>
-            <Button size="icon" variant="ghost" title="Edit" onClick={onEdit}>
-              <Pencil size={14} />
-            </Button>
-            <Button size="icon" variant="primary" title="Connect" onClick={() => connectHost(host)}>
-              <Terminal size={14} />
-            </Button>
-          </div>
-        </div>
-      </CM.Trigger>
+      <CM.Trigger asChild>{children}</CM.Trigger>
       <CM.Portal>
-        <CM.Content className="z-50 min-w-[180px] rounded-lg border border-line bg-panel p-1 shadow-xl">
-          <MenuItem icon={Terminal} onSelect={() => connectHost(host)}>
-            Connect
-          </MenuItem>
-          <MenuItem icon={FolderOpen} onSelect={() => sftpHost(host)}>
-            Open SFTP
-          </MenuItem>
-          <CM.Separator className="my-1 h-px bg-line" />
-          <MenuItem icon={Pencil} onSelect={onEdit}>
-            Edit
-          </MenuItem>
-          <MenuItem
-            icon={Copy}
-            onSelect={() =>
-              void api
-                .hostDuplicate(host.id)
-                .then(() => loadHosts())
-                .catch((e) => toast(errorMessage(e), "error"))
-            }
-          >
-            Duplicate
-          </MenuItem>
-          <MenuItem icon={Trash2} danger onSelect={() => void del()}>
-            Delete
-          </MenuItem>
+        <CM.Content className={MENU}>
+          {items.map((it, i) =>
+            it ? (
+              <CM.Item key={it.label} onSelect={it.run} className={cn(MENU_ITEM, "danger" in it && "text-danger data-[highlighted]:text-danger")}>
+                <it.icon size={14} /> {it.label}
+              </CM.Item>
+            ) : (
+              <CM.Separator key={i} className="my-1 h-px bg-line" />
+            ),
+          )}
         </CM.Content>
       </CM.Portal>
     </CM.Root>
   );
 }
 
+function MoreButton({ host, onEdit }: { host: Host; onEdit: () => void }) {
+  const items = useHostActions(host, onEdit);
+  return (
+    <DM.Root>
+      <DM.Trigger asChild>
+        <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted outline-none hover:bg-panel-2 hover:text-fg" title="More">
+          <MoreHorizontal size={18} />
+        </button>
+      </DM.Trigger>
+      <DM.Portal>
+        <DM.Content align="end" sideOffset={4} className={MENU}>
+          {items.map((it, i) =>
+            it ? (
+              <DM.Item key={it.label} onSelect={it.run} className={cn(MENU_ITEM, "danger" in it && "text-danger data-[highlighted]:text-danger")}>
+                <it.icon size={14} /> {it.label}
+              </DM.Item>
+            ) : (
+              <DM.Separator key={i} className="my-1 h-px bg-line" />
+            ),
+          )}
+        </DM.Content>
+      </DM.Portal>
+    </DM.Root>
+  );
+}
+
+function HostAvatar({ host, size = 40 }: { host: Host; size?: number }) {
+  const groups = useData((s) => s.groups);
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center text-[#0b0f17]"
+      style={{ background: hostColor(groups, host), width: size, height: size, borderRadius: size / 4 }}
+    >
+      <Server size={size / 2} />
+    </div>
+  );
+}
+
+function address(h: Host) {
+  return `${h.username ? `${h.username}@` : ""}${h.hostname}${h.port !== 22 ? `:${h.port}` : ""}`;
+}
+
+function AuthTag({ host }: { host: Host }) {
+  const credentials = useData((s) => s.credentials);
+  const cred = credentials.find((c) => c.id === host.credentialId);
+  const label =
+    host.authType === "key" ? (cred ? `key · ${cred.label}` : "key") : host.authType === "interactive" ? "interactive" : host.authType;
+  return <Badge>{label}</Badge>;
+}
+
+function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
+  const st = useData((s) => s.stats[host.id]);
+  return (
+    <HostMenu host={host} onEdit={onEdit}>
+      <div
+        draggable
+        onDragStart={(e) => e.dataTransfer.setData("termindo/host", host.id)}
+        onDoubleClick={() => connectHost(host)}
+        className="flex cursor-default flex-col gap-3.5 rounded-xl bg-panel p-4 outline outline-1 -outline-offset-1 outline-transparent transition-colors hover:outline-line"
+      >
+        <div className="flex items-center gap-3">
+          <HostAvatar host={host} />
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <div className="truncate text-[15px] font-semibold text-fg">{hostTitle(host)}</div>
+            <div className="truncate font-mono text-xs text-muted">{address(host)}</div>
+          </div>
+          <MoreButton host={host} onEdit={onEdit} />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <AuthTag host={host} />
+          {host.jumpHostId && <Badge>via jump</Badge>}
+          {host.tags.map((t) => (
+            <Badge key={t}>#{t}</Badge>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Clock size={13} className="shrink-0 text-muted" />
+          <span className="flex-1 truncate text-xs text-muted">{st?.lastConnectedAt ? timeAgo(st.lastConnectedAt) : "never"}</span>
+          <Button size="icon" variant="ghost" title="Open SFTP" onClick={() => sftpHost(host)}>
+            <FolderOpen size={16} />
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => connectHost(host)}>
+            <Terminal size={16} /> Connect
+          </Button>
+        </div>
+      </div>
+    </HostMenu>
+  );
+}
+
+function HostRow({ host, onEdit }: { host: Host; onEdit: () => void }) {
+  const st = useData((s) => s.stats[host.id]);
+  return (
+    <HostMenu host={host} onEdit={onEdit}>
+      <div
+        draggable
+        onDragStart={(e) => e.dataTransfer.setData("termindo/host", host.id)}
+        onDoubleClick={() => connectHost(host)}
+        className="flex cursor-default items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0 hover:bg-panel-2/50"
+      >
+        <HostAvatar host={host} size={28} />
+        <div className="flex w-56 min-w-0 flex-col">
+          <span className="truncate text-sm font-semibold text-fg">{hostTitle(host)}</span>
+          <span className="truncate font-mono text-xs text-muted">{address(host)}</span>
+        </div>
+        <div className="flex min-w-0 flex-1 gap-1.5 overflow-hidden">
+          <AuthTag host={host} />
+          {host.tags.map((t) => (
+            <Badge key={t}>#{t}</Badge>
+          ))}
+        </div>
+        <span className="w-20 shrink-0 text-xs text-muted">{st?.lastConnectedAt ? timeAgo(st.lastConnectedAt) : "never"}</span>
+        <Button size="icon" variant="ghost" title="Open SFTP" onClick={() => sftpHost(host)}>
+          <FolderOpen size={16} />
+        </Button>
+        <Button size="sm" variant="primary" onClick={() => connectHost(host)}>
+          <Terminal size={16} /> Connect
+        </Button>
+        <MoreButton host={host} onEdit={onEdit} />
+      </div>
+    </HostMenu>
+  );
+}
+
 export function HostsView() {
-  const { hosts, groups, loadAll, loadGroups, loadHosts } = useData();
-  const [selected, setSelected] = useState(ALL);
+  const { hosts, groups, loadAll } = useData();
+  const { hostGroup: selected, setHostGroup: setSelected } = useUi();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Host | null>(null);
-  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
-  const [quick, setQuick] = useState("");
+  const [layout, setLayoutState] = useState<Layout>(readLayout);
+  const setLayout = (l: Layout) => {
+    setLayoutState(l);
+    try {
+      localStorage.setItem(LAYOUT_KEY, l);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const tops = groups.filter((g) => !g.parentId);
+  // A nested group picked in the sidebar is shown as an extra segment so the filter stays visible.
+  const segments = selected && !tops.some((g) => g.id === selected) ? [...tops, ...groups.filter((g) => g.id === selected)] : tops;
 
   const filtered = useMemo(() => {
-    const ids = selected === ALL ? null : descendants(groups, selected);
+    const ids = selected ? groupDescendants(groups, selected) : null;
     const q = query.trim().toLowerCase();
     return hosts.filter((h) => {
       if (ids && !(h.groupId && ids.has(h.groupId))) return false;
@@ -267,14 +228,6 @@ export function HostsView() {
       return [h.label, h.hostname, h.username, ...h.tags, h.notes].some((v) => v.toLowerCase().includes(q));
     });
   }, [hosts, groups, selected, query]);
-
-  const deleteGroup = async (g: Group) => {
-    if (!(await confirmDialog({ title: `Delete group "${g.name}"?`, message: "Hosts and sub-groups move to the parent group.", danger: true, confirmLabel: "Delete" })))
-      return;
-    await api.groupDelete(g.id);
-    if (selected === g.id) setSelected(ALL);
-    await Promise.all([loadGroups(), loadHosts()]);
-  };
 
   const importSsh = async () => {
     try {
@@ -287,76 +240,88 @@ export function HostsView() {
     }
   };
 
+  const groupCount = new Set(hosts.map((h) => h.groupId).filter(Boolean)).size;
+
   return (
-    <div className="flex h-full">
-      <aside className="w-56 shrink-0 overflow-y-auto border-r border-line bg-panel/50 p-2">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Groups</span>
-          <Button
-            size="icon"
-            variant="ghost"
-            title="New group"
-            onClick={() =>
-              setEditingGroup({ id: "", name: "", parentId: selected === ALL ? null : selected, icon: null, color: null, sortOrder: 0, updatedAt: 0, deletedAt: null })
-            }
-          >
-            <FolderPlus size={15} />
-          </Button>
+    <div className="px-8 pb-8 pt-4">
+      <PageHeader
+        title="Hosts"
+        subtitle={`${hosts.length} host${hosts.length === 1 ? "" : "s"} across ${groupCount} group${groupCount === 1 ? "" : "s"}`}
+        actions={
+          <>
+            <Button onClick={() => void importSsh()} title="Import from ~/.ssh/config">
+              <FileInput size={16} /> Import SSH config
+            </Button>
+            <Button variant="primary" onClick={() => setEditing(emptyHost(selected))}>
+              <Plus size={16} /> New host
+            </Button>
+          </>
+        }
+      />
+
+      <div className="mb-6 flex items-center gap-3">
+        <div className="relative w-[300px] shrink-0">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search hosts, tags…" className="pl-[38px]" />
         </div>
-        <GroupTree groups={groups} hosts={hosts} selected={selected} onSelect={setSelected} onEdit={setEditingGroup} onDelete={(g) => void deleteGroup(g)} />
-      </aside>
-
-      <section className="min-w-0 flex-1 overflow-y-auto p-5">
-        <form
-          className="mb-4 flex items-center gap-2 rounded-xl border border-line bg-panel p-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (quickConnect(quick)) setQuick("");
-            else toast("Use the form user@host:port", "error");
-          }}
-        >
-          <Zap size={16} className="ml-1 text-accent" />
-          <input
-            value={quick}
-            onChange={(e) => setQuick(e.target.value)}
-            placeholder="Quick connect: user@host:port"
-            spellCheck={false}
-            className="flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:font-sans placeholder:text-muted"
-          />
-          <Button size="sm" variant="primary" type="submit" disabled={!quick.trim()}>
-            Connect
-          </Button>
-        </form>
-
-        <div className="mb-4 flex items-center gap-2">
-          <div className="relative max-w-sm flex-1">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search hosts, tags…" className="pl-8" />
-          </div>
-          <div className="flex-1" />
-          <Button onClick={() => void importSsh()} title="Import from ~/.ssh/config">
-            <FileInput size={14} /> Import SSH config
-          </Button>
-          <Button variant="primary" onClick={() => setEditing(emptyHost(selected === ALL ? null : selected))}>
-            <Plus size={14} /> New host
-          </Button>
-        </div>
-
-        {filtered.length === 0 ? (
-          <Empty icon={<Server size={36} />} title={hosts.length === 0 ? "No hosts yet" : "No matching hosts"}>
-            {hosts.length === 0 ? "Add a host, import your ~/.ssh/config, or use quick connect above." : "Try a different search or group."}
-          </Empty>
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">
-            {filtered.map((h) => (
-              <HostCard key={h.id} host={h} onEdit={() => setEditing(h)} />
-            ))}
+        {tops.length > 0 && (
+          <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-[10px] bg-panel p-1 [scrollbar-width:none]">
+            {[{ id: null as string | null, name: "All", count: hosts.length }, ...segments.map((g) => ({ id: g.id as string | null, name: g.name, count: groupHostCount(groups, hosts, g.id) }))].map(
+              (s) => (
+                <button
+                  key={s.id ?? "all"}
+                  onClick={() => setSelected(s.id)}
+                  className={cn(
+                    "flex h-8 shrink-0 items-center gap-2 rounded-[7px] px-3 text-[13px] transition-colors",
+                    selected === s.id ? "bg-panel-3 font-semibold text-fg" : "font-medium text-fg-2 hover:text-fg",
+                  )}
+                >
+                  {s.name}
+                  <span className="font-mono text-[11px] font-normal text-muted">{s.count}</span>
+                </button>
+              ),
+            )}
           </div>
         )}
-      </section>
+        <div className="flex-1" />
+        <div className="flex shrink-0 gap-0.5 rounded-[10px] bg-panel p-1">
+          {(
+            [
+              ["grid", LayoutGrid],
+              ["list", List],
+            ] as const
+          ).map(([id, Icon]) => (
+            <button
+              key={id}
+              title={id === "grid" ? "Cards" : "List"}
+              onClick={() => setLayout(id)}
+              className={cn("flex h-8 w-8 items-center justify-center rounded-[7px]", layout === id ? "bg-panel-3 text-fg" : "text-muted hover:text-fg")}
+            >
+              <Icon size={16} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Empty icon={<Server size={22} />} title={hosts.length === 0 ? "No hosts yet" : "No matching hosts"}>
+          {hosts.length === 0 ? "Add a host, import your ~/.ssh/config, or press Ctrl K to quick connect." : "Try a different search or group."}
+        </Empty>
+      ) : layout === "grid" ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-4">
+          {filtered.map((h) => (
+            <HostCard key={h.id} host={h} onEdit={() => setEditing(h)} />
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl bg-panel">
+          {filtered.map((h) => (
+            <HostRow key={h.id} host={h} onEdit={() => setEditing(h)} />
+          ))}
+        </div>
+      )}
 
       <HostEditor host={editing} onClose={() => setEditing(null)} />
-      <GroupEditor group={editingGroup} onClose={() => setEditingGroup(null)} />
     </div>
   );
 }

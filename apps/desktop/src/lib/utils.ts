@@ -26,8 +26,8 @@ export function timeAgo(ms: number | null | undefined): string {
   const s = Math.round((Date.now() - ms) / 1000);
   if (s < 45) return "just now";
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} d ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
 }
 
 export function permString(mode: number | null, isDir: boolean): string {

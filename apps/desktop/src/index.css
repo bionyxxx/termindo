@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
 @import "@xterm/xterm/css/xterm.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -7,48 +9,58 @@
   --color-bg: var(--app-bg);
   --color-panel: var(--app-panel);
   --color-panel-2: var(--app-panel-2);
+  --color-panel-3: var(--app-panel-3);
   --color-hover: var(--app-hover);
   --color-line: var(--app-line);
   --color-fg: var(--app-fg);
+  --color-fg-2: var(--app-fg-2);
   --color-muted: var(--app-muted);
   --color-accent: var(--app-accent);
   --color-accent-fg: var(--app-accent-fg);
+  --color-indigo: var(--app-indigo);
   --color-danger: var(--app-danger);
   --color-ok: var(--app-ok);
   --color-warn: var(--app-warn);
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+  --font-sans: "Geist Variable", "Geist", "Inter", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
 }
 
+/* Solid v1 palette: bg → surface-1 (panel) → surface-2 (panel-2) → surface-3 (panel-3). */
 :root,
 [data-theme="dark"] {
-  --app-bg: #0b1020;
-  --app-panel: #111832;
-  --app-panel-2: #172042;
-  --app-hover: #1e2a52;
-  --app-line: #26315a;
-  --app-fg: #e2e8f0;
-  --app-muted: #8b98b8;
+  --app-bg: #090b10;
+  --app-panel: #10131a;
+  --app-panel-2: #171b24;
+  --app-panel-3: #1f2431;
+  --app-hover: #1f2431;
+  --app-line: #242a37;
+  --app-fg: #eceff4;
+  --app-fg-2: #a3abba;
+  --app-muted: #6b7385;
   --app-accent: #22d3ee;
-  --app-accent-fg: #04121a;
+  --app-accent-fg: #041017;
+  --app-indigo: #6366f1;
   --app-danger: #f87171;
-  --app-ok: #4ade80;
+  --app-ok: #34d399;
   --app-warn: #fbbf24;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --app-bg: #f4f6fb;
+  --app-bg: #f3f5f8;
   --app-panel: #ffffff;
-  --app-panel-2: #eef2f9;
-  --app-hover: #e3e9f5;
-  --app-line: #d8deea;
-  --app-fg: #0f172a;
-  --app-muted: #5b6785;
+  --app-panel-2: #eef1f5;
+  --app-panel-3: #e2e6ed;
+  --app-hover: #e2e6ed;
+  --app-line: #dce1e9;
+  --app-fg: #0e1320;
+  --app-fg-2: #4a5365;
+  --app-muted: #7a8394;
   --app-accent: #0891b2;
   --app-accent-fg: #ffffff;
+  --app-indigo: #4f46e5;
   --app-danger: #dc2626;
-  --app-ok: #16a34a;
+  --app-ok: #059669;
   --app-warn: #d97706;
   color-scheme: light;
 }
@@ -92,19 +104,35 @@ select,
 }
 
 .xterm {
-  padding: 6px 0 0 8px;
+  padding: 10px 0 0 14px;
   height: 100%;
 }
 .xterm .xterm-viewport {
   background-color: transparent !important;
 }
 
+/* Split handles sit in the gap between rounded panes; a thin accent line shows on hover/drag. */
 [data-separator] {
-  background: var(--app-line);
+  position: relative;
+  background: transparent;
+}
+[data-separator]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 2px;
+  background: transparent;
   transition: background 0.15s;
 }
-[data-separator]:hover,
-[data-separator][data-separator-state="drag"] {
+[data-separator].w-2::after {
+  width: 2px;
+}
+[data-separator].h-2::after {
+  height: 2px;
+}
+[data-separator]:hover::after,
+[data-separator][data-separator-state="drag"]::after {
   background: var(--app-accent);
 }
 
@@ -115,4 +143,15 @@ select,
 }
 .animate-pulse-dot {
   animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+/* Terminal default font family names "JetBrains Mono"; alias it to the bundled variable font. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src:
+    local("JetBrains Mono"),
+    url("../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2") format("woff2-variations");
 }
