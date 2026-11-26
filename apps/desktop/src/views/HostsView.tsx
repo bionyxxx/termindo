@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import * as DM from "@radix-ui/react-dropdown-menu";
 import * as CM from "@radix-ui/react-context-menu";
-import { Plus, Search, Server, Terminal, FolderOpen, Pencil, Copy, Trash2, FileInput, LayoutGrid, List, MoreHorizontal, Clock } from "lucide-react";
+import { Plus, Search, Server, Terminal, FolderOpen, Pencil, Copy, Trash2, FileInput, LayoutGrid, List, MoreHorizontal, Clock, Eye, EyeOff } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { connectHost, sftpHost } from "../lib/actions";
 import { cn, timeAgo } from "../lib/utils";
@@ -13,12 +13,22 @@ import { HostEditor } from "./HostEditor";
 
 type Layout = "grid" | "list";
 const LAYOUT_KEY = "termindo.hostsLayout";
+const HIDE_KEY = "termindo.hostsHideCredentials";
+const MASK = "••••••••";
 
 function readLayout(): Layout {
   try {
     return localStorage.getItem(LAYOUT_KEY) === "list" ? "list" : "grid";
   } catch {
     return "grid";
+  }
+}
+
+function readHidden(): boolean {
+  try {
+    return localStorage.getItem(HIDE_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -114,19 +124,26 @@ function HostAvatar({ host, size = 40 }: { host: Host; size?: number }) {
   );
 }
 
-function address(h: Host) {
+/** `hidden` masks user, hostname and port (e.g. while screen sharing). */
+function address(h: Host, hidden: boolean) {
+  if (hidden) return `${h.username ? "•••@" : ""}${MASK}`;
   return `${h.username ? `${h.username}@` : ""}${h.hostname}${h.port !== 22 ? `:${h.port}` : ""}`;
 }
 
-function AuthTag({ host }: { host: Host }) {
+/** Hosts without a label fall back to their hostname, so mask that too. */
+function title(h: Host, hidden: boolean) {
+  return hidden && !h.label ? MASK : hostTitle(h);
+}
+
+function AuthTag({ host, hidden }: { host: Host; hidden: boolean }) {
   const credentials = useData((s) => s.credentials);
   const cred = credentials.find((c) => c.id === host.credentialId);
   const label =
-    host.authType === "key" ? (cred ? `key · ${cred.label}` : "key") : host.authType === "interactive" ? "interactive" : host.authType;
+    host.authType === "key" ? (cred && !hidden ? `key · ${cred.label}` : "key") : host.authType === "interactive" ? "interactive" : host.authType;
   return <Badge>{label}</Badge>;
 }
 
-function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
+function HostCard({ host, hidden, onEdit }: { host: Host; hidden: boolean; onEdit: () => void }) {
   const st = useData((s) => s.stats[host.id]);
   return (
     <HostMenu host={host} onEdit={onEdit}>
@@ -139,13 +156,13 @@ function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
         <div className="flex items-center gap-3">
           <HostAvatar host={host} />
           <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-            <div className="truncate text-[15px] font-semibold text-fg">{hostTitle(host)}</div>
-            <div className="truncate font-mono text-xs text-muted">{address(host)}</div>
+            <div className="truncate text-[15px] font-semibold text-fg">{title(host, hidden)}</div>
+            <div className="truncate font-mono text-xs text-muted">{address(host, hidden)}</div>
           </div>
           <MoreButton host={host} onEdit={onEdit} />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <AuthTag host={host} />
+          <AuthTag host={host} hidden={hidden} />
           {host.jumpHostId && <Badge>via jump</Badge>}
           {host.tags.map((t) => (
             <Badge key={t}>#{t}</Badge>
@@ -166,7 +183,7 @@ function HostCard({ host, onEdit }: { host: Host; onEdit: () => void }) {
   );
 }
 
-function HostRow({ host, onEdit }: { host: Host; onEdit: () => void }) {
+function HostRow({ host, hidden, onEdit }: { host: Host; hidden: boolean; onEdit: () => void }) {
   const st = useData((s) => s.stats[host.id]);
   return (
     <HostMenu host={host} onEdit={onEdit}>
@@ -178,11 +195,11 @@ function HostRow({ host, onEdit }: { host: Host; onEdit: () => void }) {
       >
         <HostAvatar host={host} size={28} />
         <div className="flex w-56 min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold text-fg">{hostTitle(host)}</span>
-          <span className="truncate font-mono text-xs text-muted">{address(host)}</span>
+          <span className="truncate text-sm font-semibold text-fg">{title(host, hidden)}</span>
+          <span className="truncate font-mono text-xs text-muted">{address(host, hidden)}</span>
         </div>
         <div className="flex min-w-0 flex-1 gap-1.5 overflow-hidden">
-          <AuthTag host={host} />
+          <AuthTag host={host} hidden={hidden} />
           {host.tags.map((t) => (
             <Badge key={t}>#{t}</Badge>
           ))}
@@ -206,6 +223,16 @@ export function HostsView() {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Host | null>(null);
   const [layout, setLayoutState] = useState<Layout>(readLayout);
+  const [hidden, setHiddenState] = useState(readHidden);
+  const toggleHidden = () => {
+    const next = !hidden;
+    setHiddenState(next);
+    try {
+      localStorage.setItem(HIDE_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
   const setLayout = (l: Layout) => {
     setLayoutState(l);
     try {
@@ -284,6 +311,16 @@ export function HostsView() {
           </div>
         )}
         <div className="flex-1" />
+        <div className="flex shrink-0 rounded-[10px] bg-panel p-1">
+          <button
+            title={hidden ? "Show credentials" : "Hide credentials"}
+            aria-pressed={hidden}
+            onClick={toggleHidden}
+            className={cn("flex h-8 w-8 items-center justify-center rounded-[7px]", hidden ? "bg-panel-3 text-fg" : "text-muted hover:text-fg")}
+          >
+            {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
         <div className="flex shrink-0 gap-0.5 rounded-[10px] bg-panel p-1">
           {(
             [
@@ -310,13 +347,13 @@ export function HostsView() {
       ) : layout === "grid" ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-4">
           {filtered.map((h) => (
-            <HostCard key={h.id} host={h} onEdit={() => setEditing(h)} />
+            <HostCard key={h.id} host={h} hidden={hidden} onEdit={() => setEditing(h)} />
           ))}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl bg-panel">
           {filtered.map((h) => (
-            <HostRow key={h.id} host={h} onEdit={() => setEditing(h)} />
+            <HostRow key={h.id} host={h} hidden={hidden} onEdit={() => setEditing(h)} />
           ))}
         </div>
       )}
