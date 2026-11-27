@@ -89,6 +89,29 @@ select,
   user-select: text;
 }
 
+/* In-app drag and drop (lib/drag.ts). */
+.dragging,
+.dragging * {
+  cursor: grabbing !important;
+}
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--app-accent);
+  background: var(--app-panel-2);
+  color: var(--app-fg);
+  font-size: 12px;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

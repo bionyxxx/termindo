@@ -20,6 +20,7 @@ import { useApp } from "../stores/app";
 import { groupColor, groupHostCount, PALETTE, useData } from "../stores/data";
 import { confirmDialog, toast, useUi, type View } from "../stores/ui";
 import { api, errorMessage } from "../lib/api";
+import { dropZone } from "../lib/drag";
 import { cn, isMac, timeAgo } from "../lib/utils";
 import type { Group } from "../lib/types";
 import { GroupEditor } from "../views/HostEditor";
@@ -52,7 +53,6 @@ function NavItem({ icon: Icon, label, count, active, onClick }: { icon: typeof S
 function GroupItem({ group, depth, color, onEdit, onDelete }: { group: Group; depth: number; color: string; onEdit: () => void; onDelete: () => void }) {
   const { hosts, groups } = useData();
   const { view, hostGroup, setHostGroup, setView } = useUi();
-  const [dragOver, setDragOver] = useState(false);
   const active = view === "hosts" && hostGroup === group.id;
   return (
     <CM.Root>
@@ -62,25 +62,18 @@ function GroupItem({ group, depth, color, onEdit, onDelete }: { group: Group; de
             setView("hosts");
             setHostGroup(active ? null : group.id);
           }}
-          onDragOver={(e) => {
-            if (!e.dataTransfer.types.includes("termindo/host")) return;
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            setDragOver(false);
-            const host = hosts.find((h) => h.id === e.dataTransfer.getData("termindo/host"));
+          ref={dropZone("termindo/host", (id) => {
+            const host = hosts.find((h) => h.id === id);
             if (host)
               void api
                 .hostSave({ ...host, groupId: group.id })
                 .then(() => useData.getState().loadHosts())
                 .catch((err) => toast(errorMessage(err), "error"));
-          }}
+          })}
           className={cn(
             "flex h-8 w-full items-center gap-3 rounded-lg pr-3 text-left text-[13px] transition-colors",
             active ? "bg-panel-2 text-fg" : "text-fg-2 hover:bg-panel-2/60 hover:text-fg",
-            dragOver && "bg-accent/15 text-fg",
+            "data-drag-over:bg-accent/15! data-drag-over:text-fg!",
           )}
           style={{ paddingLeft: 12 + depth * 14 }}
         >

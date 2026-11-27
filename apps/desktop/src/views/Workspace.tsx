@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Plus, X, Home, Radio } from "lucide-react";
 import { useApp } from "../stores/app";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, promptInput, useUi } from "../stores/ui";
 import { HOME_TAB, layoutPaneIds, persistSession, restoreSession, useWorkspace, type Tab } from "../stores/workspace";
 import { findSession, setShortcutFilter } from "../terminal/registry";
+import { dropZone, startDrag } from "../lib/drag";
 import { cn, isMac } from "../lib/utils";
 import { StatusDot } from "../components/ui";
 import { HostsView } from "./HostsView";
@@ -177,7 +178,6 @@ function useShortcuts() {
 
 function TabButton({ tab }: { tab: Tab }) {
   const { activeTabId, setActiveTab, moveTab, panes, renameTab } = useWorkspace();
-  const [dragOver, setDragOver] = useState(false);
   const active = tab.id === activeTabId;
   const statuses = tab.kind === "terminal" ? layoutPaneIds(tab.layout).map((id) => panes[id]?.status ?? "closed") : [];
   const status = statuses.includes("connected")
@@ -189,20 +189,8 @@ function TabButton({ tab }: { tab: Tab }) {
         : "closed";
   return (
     <div
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData("termindo/tab", tab.id)}
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("termindo/tab")) {
-          e.preventDefault();
-          setDragOver(true);
-        }
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
-        setDragOver(false);
-        const from = e.dataTransfer.getData("termindo/tab");
-        if (from) moveTab(from, tab.id);
-      }}
+      ref={dropZone("termindo/tab", (from) => moveTab(from, tab.id))}
+      onPointerDown={(e) => startDrag(e, "termindo/tab", () => ({ data: tab.id, label: tab.title }))}
       onMouseDown={(e) => {
         if (e.button === 1) {
           e.preventDefault();
@@ -218,7 +206,7 @@ function TabButton({ tab }: { tab: Tab }) {
       className={cn(
         "group relative flex h-[30px] max-w-[220px] min-w-0 shrink-0 cursor-default items-center gap-2 rounded-[7px] px-3 text-[13px] font-medium transition-colors",
         active ? "bg-panel-2 text-fg" : "text-fg-2 hover:bg-panel-2/60 hover:text-fg",
-        dragOver && "ring-1 ring-accent",
+        "data-drag-over:ring-1 data-drag-over:ring-accent",
       )}
     >
       {tab.kind === "sftp" ? (

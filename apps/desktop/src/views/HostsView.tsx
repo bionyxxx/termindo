@@ -4,6 +4,7 @@ import * as CM from "@radix-ui/react-context-menu";
 import { Plus, Search, Server, Terminal, FolderOpen, Pencil, Copy, Trash2, FileInput, LayoutGrid, List, MoreHorizontal, Clock, Eye, EyeOff } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { connectHost, sftpHost } from "../lib/actions";
+import { startDrag } from "../lib/drag";
 import { cn, timeAgo } from "../lib/utils";
 import { emptyHost, groupDescendants, groupHostCount, hostColor, hostTitle, useData } from "../stores/data";
 import { confirmDialog, toast, useUi } from "../stores/ui";
@@ -148,8 +149,7 @@ function HostCard({ host, hidden, onEdit }: { host: Host; hidden: boolean; onEdi
   return (
     <HostMenu host={host} onEdit={onEdit}>
       <div
-        draggable
-        onDragStart={(e) => e.dataTransfer.setData("termindo/host", host.id)}
+        onPointerDown={(e) => startDrag(e, "termindo/host", () => ({ data: host.id, label: title(host, hidden) }))}
         onDoubleClick={() => connectHost(host)}
         className="flex cursor-default flex-col gap-3.5 rounded-xl bg-panel p-4 outline outline-1 -outline-offset-1 outline-transparent transition-colors hover:outline-line"
       >
@@ -188,8 +188,7 @@ function HostRow({ host, hidden, onEdit }: { host: Host; hidden: boolean; onEdit
   return (
     <HostMenu host={host} onEdit={onEdit}>
       <div
-        draggable
-        onDragStart={(e) => e.dataTransfer.setData("termindo/host", host.id)}
+        onPointerDown={(e) => startDrag(e, "termindo/host", () => ({ data: host.id, label: title(host, hidden) }))}
         onDoubleClick={() => connectHost(host)}
         className="flex cursor-default items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0 hover:bg-panel-2/50"
       >

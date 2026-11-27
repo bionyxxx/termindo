@@ -1,8 +1,8 @@
 # PLAN.md — Termindo
 
 > Aplikasi SSH client desktop setara Termius.
-> Status: **Implementasi awal F1–F5 selesai, build & test lulus** (lihat §9).
-> Terakhir diperbarui: 2026-11-24
+> Status: **F1–F5 ada dengan beberapa celah, F6 berjalan** (rilis terakhir v0.1.6, lihat §9).
+> Terakhir diperbarui: 2026-11-28
 
 ---
 
@@ -216,29 +216,100 @@ Prinsip: **offline-first** — semua operasi terhadap SQLite lokal, sync berjala
 
 ---
 
-## 9. Status implementasi (2026-11-24)
+## 9. Status implementasi (2026-11-28)
 
-| Fase | Status | Catatan |
+Rilis terakhir: **v0.1.6**. Status di bawah berasal dari pembacaan kode dan test otomatis;
+yang diuji manual di aplikasi disebut di bagian Verifikasi.
+
+| Fase | Status | Sudah ada |
 |---|---|---|
-| F1 Fondasi | ✅ ditulis | Workspace, Tauri shell, skema SQLite + migrasi, vault (Argon2id/HKDF/XChaCha20-Poly1305), recovery key, OS keychain unlock, CI |
-| F2 SSH core | ✅ ditulis | russh 0.65: password, key (+passphrase), agent, keyboard-interactive, ProxyJump; TOFU host key; PTY shell; xterm.js via raw IPC channel |
-| F3 Workspace UX | ✅ ditulis | Tabs (drag), split pane, broadcast input, restore sesi, host/grup/tag, command palette, snippet + placeholder, import ~/.ssh/config, JSON/CSV backup, riwayat |
-| F4 SFTP | ✅ ditulis | Dual pane, drag & drop (termasuk dari file manager), queue + prioritas, pause/resume/retry, edit remote, chmod/rename/delete |
-| F5 Sync & akun | ✅ ditulis | Server Axum + Postgres, JWT + refresh rotation, E2E record envelope, LWW + tombstone, device management, recovery |
-| F6 Polish & rilis | ⏳ | Port forwarding, updater, signing, QA lintas OS |
+| F1 Fondasi | ✅ | Workspace, Tauri shell, skema SQLite + migrasi, vault (Argon2id/HKDF/XChaCha20-Poly1305), recovery key, OS keychain unlock, CI di 3 OS |
+| F2 SSH core | ✅ | russh 0.65: password, key (+passphrase), agent, keyboard-interactive, ProxyJump; TOFU host key; keepalive, auto-reconnect; PTY shell; xterm.js via raw IPC channel (WebGL dengan fallback DOM) |
+| F3 Workspace UX | ✅ | Tabs (drag), split pane, broadcast input, restore sesi, host/grup/tag, command palette, snippet + placeholder, import `~/.ssh/config`, JSON/CSV backup, riwayat |
+| F4 SFTP | ✅ | Dual pane, drag & drop (termasuk dari file manager), queue + prioritas, pause/resume/retry, edit remote, chmod/rename/delete |
+| F5 Sync & akun | ✅ | Server Axum + Postgres, JWT + refresh rotation, E2E record envelope, LWW + tombstone, device management, recovery, Docker compose untuk self-host |
+| F6 Polish & rilis | 🟡 | Packaging (`.deb`, `.rpm`, AppImage, `.dmg`, `.msi`, NSIS), auto-update (`.deb`/`.rpm` manual), ProxyJump di editor host, daftar & hapus known hosts |
 
-**Penyimpangan dari rencana awal:**
+✅ isi fase di §5 sudah ada (celah terhadap rincian §4 tercantum di bawah) · 🟡 sebagian
+
+### Belum ada
+
+- **F3:** layout tersimpan per host/group (hanya ada satu sesi global); hotkey snippet
+  (field di database ada, UI dan key binding tidak ada).
+- **F4:** breadcrumb dan file tree remote; verifikasi checksum transfer.
+- **F6:** port forwarding (opsional); code signing dan notarization OS (yang ditandatangani
+  hanya bundle updater); QA manual lintas OS.
+- **Testing (§2.3):** e2e Playwright; testcontainers.
+- **Lain-lain:** system tray dan modul `config` di core (§3.1); local terminal (rencana masa depan).
+
+### Setengah jadi
+
+- Restore sesi tidak menyimpan ukuran split dan tab aktif.
+- Quick connect hanya mendukung password.
+- Search SFTP hanya memfilter folder yang sedang dibuka.
+- Antrean transfer hanya di memori; menutup tab SFTP membatalkan transfer tanpa konfirmasi.
+- Edit file remote dibatasi 20 MB, tidak mendeteksi perubahan di server, dan tidak bisa
+  dihentikan dari UI.
+- Koneksi SFTP di riwayat tidak pernah dicatat selesai.
+- Import/export CSV hanya memuat label, hostname, port, username, grup, dan tag.
+- Import `~/.ssh/config` hanya menautkan hop pertama ProxyJump.
+- Known-hosts UI belum bisa menambah, mengubah, atau mengimpor `~/.ssh/known_hosts`.
+- Recovery key hanya bisa disalin saat ditampilkan; tidak bisa disimpan ke file atau dibuat ulang.
+- Sync: record yang gagal didekripsi dilewati permanen (cursor tetap maju) dan tidak
+  diberitahukan di UI; dua versi dengan `updated_at` sama tetapi isi berbeda tidak pernah konvergen.
+- Indikator status sync tidak terlihat di tab terminal dan SFTP.
+- Test integrasi SSH tidak jalan di CI (butuh `TERMINDO_TEST_SSH`).
+
+### Bug
+
+Diperbaiki di [PR #20](https://github.com/bionyxxx/termindo/pull/20):
+
+- Resume/retry SFTP menyambung ke file yang bukan hasil transfer itu.
+- Dialog host key dan OTP terputus setelah 15 detik.
+- Auto-reconnect berhenti setelah satu percobaan gagal.
+- Jump host yang butuh password atau passphrase memintanya terus-menerus.
+
+Diperbaiki di [PR #21](https://github.com/bionyxxx/termindo/pull/21):
+
+- Drag & drop internal (tab, antar pane SFTP, host ke grup) tidak jalan di Windows. Sekarang
+  memakai pointer event, karena handler drop file Tauri tetap dibutuhkan untuk file dari Explorer.
+
+Masih terbuka:
+
+- Resume SFTP tidak mendeteksi file tujuan yang diubah pihak lain saat transfer di-pause.
+- Upload yang gagal di satu blok mungkin meninggalkan celah yang dilewati saat resume
+  (dugaan dari pembacaan library, belum direproduksi).
+- Konfirmasi di ssh-agent masih terhitung dalam timeout koneksi.
+
+### Rencana yang belum dikerjakan
+
+- SFTP berbagi koneksi dengan terminal (`docs/plan-sftp-shared-connection.md`).
+
+### Penyimpangan dari rencana awal
+
 - Tabel `keypairs` digabung ke `credentials` (kind `private_key` + kolom `public_key`).
 - TanStack Query tidak dipakai; zustand cukup untuk data lokal.
 - Password akun sync = master password (model Bitwarden): server hanya menerima `auth_hash` turunan HKDF.
 - `known_hosts.id` deterministik (`kh:<host>:<port>`) supaya device konvergen.
 - Konflik LWW berbasis `updated_at`; versi sama = idempotent (tidak ada tie-break konten).
 
-**Verifikasi (2026-11-24):**
-- `cargo build` + `cargo clippy --workspace --all-targets -D warnings` + `cargo fmt`: bersih.
-- `cargo test --workspace`: semua lulus, termasuk integrasi SSH terhadap OpenSSH di Docker
-  (password, public key, password salah, PTY resize, exit status, SFTP resume dua arah, chmod/rename/hapus rekursif)
-  dan integrasi server terhadap Postgres (register/login/push/pull/konflik/revoke/refresh reuse/ganti password/recovery).
-- Frontend: `tsc`, `vitest`, `vite build` lulus; 73 command IPC dicek cocok nama & argumennya dengan Rust.
+### Verifikasi
+
+2026-11-28, pada gabungan kode PR #20 dan #21:
+
+- `cargo fmt --check` dan `cargo clippy --workspace --all-targets -D warnings`: bersih.
+- `cargo test --workspace`: lulus, termasuk integrasi SSH terhadap OpenSSH di Docker.
+  Integrasi server dilewati secara lokal (tanpa Postgres); CI menjalankannya.
+- Frontend: `tsc`, `vitest`, `vite build` lulus.
+- Manual di Windows (installer dari branch PR #21): drag urutan tab, host ke grup, file antar
+  panel SFTP termasuk ke folder, dan drop dari Explorer lulus.
+
+2026-11-24 (implementasi awal):
+
+- Integrasi server terhadap Postgres lulus (register/login/push/pull/konflik/revoke/refresh reuse/ganti password/recovery).
+- 73 command IPC dicek cocok nama & argumennya dengan Rust.
 - App desktop jalan (`npm run tauri dev`): migrasi DB OK, tanpa panic.
-- **Belum diuji:** alur UI di dalam jendela (klik-klik) — butuh uji manual atau `webkit2gtk-driver` untuk e2e.
+
+**Belum diuji:** sebagian besar alur UI di dalam jendela, termasuk keempat perbaikan PR #20
+(butuh uji manual atau `webkit2gtk-driver` untuk e2e); koneksi yang berhasil menembus jump
+host sungguhan; drag & drop pointer di macOS dan Linux.
