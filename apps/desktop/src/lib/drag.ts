@@ -40,8 +40,8 @@ function swallowClick() {
     e.stopPropagation();
     e.preventDefault();
   };
-  window.addEventListener("click", stop, true);
-  setTimeout(() => window.removeEventListener("click", stop, true), 0);
+  window.addEventListener("click", stop, { capture: true });
+  setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
 }
 
 /**
@@ -74,7 +74,7 @@ export function startDrag(down: ReactPointerEvent, type: string, payload: () => 
     window.removeEventListener("pointerup", up);
     window.removeEventListener("pointercancel", end);
     window.removeEventListener("blur", end);
-    window.removeEventListener("keydown", key, true);
+    window.removeEventListener("keydown", key, { capture: true });
   };
 
   const move = (e: PointerEvent) => {
@@ -118,5 +118,5 @@ export function startDrag(down: ReactPointerEvent, type: string, payload: () => 
   window.addEventListener("pointerup", up);
   window.addEventListener("pointercancel", end);
   window.addEventListener("blur", end);
-  window.addEventListener("keydown", key, true);
+  window.addEventListener("keydown", key, { capture: true });
 }
