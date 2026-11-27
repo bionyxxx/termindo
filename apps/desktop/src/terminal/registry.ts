@@ -9,16 +9,17 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, Channel, errorCode, errorMessage } from "../lib/api";
+import { PromptedSecrets } from "../lib/secrets";
 import { useData } from "../stores/data";
 import { type Settings, useSettings } from "../stores/settings";
 import { promptInput, toast } from "../stores/ui";
 import { useWorkspace } from "../stores/workspace";
+import { MAX_RECONNECTS, Reconnector, type Retry } from "./reconnect";
 import { terminalTheme } from "./themes";
 
 const DIM = "\x1b[90m";
 const RED = "\x1b[31m";
 const RESET = "\x1b[0m";
-const MAX_RECONNECTS = 5;
 
 /** Returns true if the key event was an app shortcut (handled elsewhere). */
 type ShortcutFilter = (e: KeyboardEvent) => boolean;
@@ -39,10 +40,8 @@ export class TermSession {
   private connected = false;
   private connecting = false;
   private disposed = false;
-  private reconnects = 0;
-  private reconnectTimer?: ReturnType<typeof setTimeout>;
-  /** One-off password entered in a prompt; kept in memory only for reconnects. */
-  private password: string | null = null;
+  private readonly autoReconnect = new Reconnector(() => void this.connect());
+  private readonly secrets = new PromptedSecrets();
   private resizeTimer?: ReturnType<typeof setTimeout>;
 
   constructor(paneId: string, settings: Settings) {
@@ -201,43 +200,49 @@ export class TermSession {
     channel.onmessage = (buf) => this.term.write(new Uint8Array(buf));
     try {
       this.fit();
-      await api.sshConnect(this.paneId, { ...pane.target, password: this.password }, this.term.cols, this.term.rows, channel);
+      await api.sshConnect(this.paneId, this.secrets.addTo(pane.target), this.term.cols, this.term.rows, channel);
+      // The pane was closed while connecting: don't leave the session running.
+      if (this.disposed) return void api.sshClose(this.paneId).catch(() => {});
       this.connected = true;
-      this.reconnects = 0;
+      this.autoReconnect.stop();
       this.status("connected");
       void useData.getState().loadStats();
       this.fit();
       void api.sshResize(this.paneId, this.term.cols, this.term.rows).catch(() => {});
     } catch (e) {
-      const code = errorCode(e);
-      if (code === "password_required" || code === "passphrase_required" || (code === "auth_failed" && this.password !== null)) {
-        const value = await promptInput({
-          title: code === "passphrase_required" ? "Key passphrase" : "Password",
-          message: code === "auth_failed" ? `Authentication failed for ${pane.title}. Try again.` : errorMessage(e),
-          label: code === "passphrase_required" ? "Passphrase" : "Password",
-          secret: true,
-          confirmLabel: "Connect",
-        });
+      const request = this.secrets.request(e, pane.title);
+      if (request) {
+        const { hostId, ...prompt } = request;
+        const value = await promptInput({ ...prompt, secret: true, confirmLabel: "Connect" });
         this.connecting = false;
         if (value !== null) {
-          this.password = value;
+          this.secrets.set(hostId, value);
           return await this.connect();
         }
+        this.autoReconnect.stop();
         this.term.write(`${RED}Cancelled.${RESET} ${DIM}Press Enter to retry.${RESET}\r\n`);
         this.status("error", "cancelled");
         return;
       }
       this.status("error", errorMessage(e));
-      this.term.write(`${RED}✖ ${errorMessage(e)}${RESET}\r\n${DIM}Press Enter to retry.${RESET}\r\n`);
+      this.term.write(`${RED}✖ ${errorMessage(e)}${RESET}\r\n`);
+      const retry = this.autoReconnect.failed(errorCode(e));
+      if (retry) this.announceRetry(retry);
+      else this.term.write(`${DIM}Press Enter to retry.${RESET}\r\n`);
     } finally {
       this.connecting = false;
     }
   }
 
   async reconnect(manual = false) {
-    if (manual) this.reconnects = 0;
-    clearTimeout(this.reconnectTimer);
+    if (manual) this.autoReconnect.retryNow();
     await this.connect();
+  }
+
+  private announceRetry({ attempt, delayMs }: Retry) {
+    this.term.write(
+      `${DIM}Reconnecting in ${delayMs / 1000} s… (attempt ${attempt}/${MAX_RECONNECTS})${RESET}\r\n`,
+    );
   }
 
   /** Backend reports the shell closed. */
@@ -252,14 +257,9 @@ export class TermSession {
     const host = pane?.target.hostId ? useData.getState().hosts.find((h) => h.id === pane.target.hostId) : undefined;
     const auto = host?.options.autoReconnect ?? false;
     // Exit status 0 means the user typed `exit`: don't reconnect automatically.
-    if (auto && exitStatus !== 0 && this.reconnects < MAX_RECONNECTS) {
-      const delay = Math.min(30000, 1000 * 2 ** this.reconnects);
-      this.reconnects++;
-      this.term.write(`${DIM}Reconnecting in ${Math.round(delay / 1000)} s… (attempt ${this.reconnects}/${MAX_RECONNECTS})${RESET}\r\n`);
-      this.reconnectTimer = setTimeout(() => void this.connect(), delay);
-    } else {
-      this.term.write(`${DIM}Press Enter to reconnect.${RESET}\r\n`);
-    }
+    const retry = auto && exitStatus !== 0 ? this.autoReconnect.dropped() : null;
+    if (retry) this.announceRetry(retry);
+    else this.term.write(`${DIM}Press Enter to reconnect.${RESET}\r\n`);
   }
 
   applySettings(s: Settings) {
@@ -279,7 +279,7 @@ export class TermSession {
 
   dispose() {
     this.disposed = true;
-    clearTimeout(this.reconnectTimer);
+    this.autoReconnect.stop();
     if (this.started) void api.sshClose(this.paneId).catch(() => {});
     this.webgl?.dispose();
     this.term.dispose();

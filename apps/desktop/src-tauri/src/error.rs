@@ -10,6 +10,9 @@ use termindo_sync::engine::SyncError;
 pub struct CmdError {
     pub code: String,
     pub message: String,
+    /// The jump host a password, passphrase or authentication error is about.
+    #[serde(rename = "hostId", skip_serializing_if = "Option::is_none")]
+    pub host_id: Option<String>,
 }
 
 pub type CmdResult<T> = Result<T, CmdError>;
@@ -19,6 +22,7 @@ impl CmdError {
         Self {
             code: code.to_string(),
             message: message.into(),
+            host_id: None,
         }
     }
     pub fn invalid(message: impl Into<String>) -> Self {
@@ -53,7 +57,7 @@ impl From<CoreError> for CmdError {
 impl From<SshError> for CmdError {
     fn from(e: SshError) -> Self {
         let code = match &e {
-            SshError::Auth(_) => "auth_failed",
+            SshError::Auth(_) | SshError::JumpAuth { .. } => "auth_failed",
             SshError::HostKeyRejected(_) => "host_key_rejected",
             SshError::Timeout => "timeout",
             SshError::Connect(_) => "connect_failed",

@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use termindo_core::models::{AuthType, CredentialKind, Host, HostOptions, Snippet};
 use termindo_core::snippet;
 use termindo_ssh::shell::{open_shell, ShellEvent, ShellOptions};
-use termindo_ssh::{AuthMethod, ConnectConfig, SshConnection};
+use termindo_ssh::{AuthMethod, ConnectConfig, SshConnection, SshError};
 use zeroize::Zeroizing;
 
 use crate::commands::data::decrypt_secret;
@@ -37,6 +37,9 @@ pub struct ConnectTarget {
     pub quick: Option<QuickConnect>,
     /// One-off password (or key passphrase) entered in a prompt; never stored.
     pub password: Option<String>,
+    /// The same, for jump hosts, by host id.
+    #[serde(default)]
+    pub jump_passwords: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,6 +54,7 @@ pub fn build_config(
     state: &AppState,
     host: &Host,
     password: Option<&str>,
+    jump_passwords: &HashMap<String, String>,
     depth: usize,
 ) -> CmdResult<ConnectConfig> {
     if depth > MAX_JUMP_DEPTH {
@@ -129,7 +133,21 @@ pub fn build_config(
                 host.display_name()
             ))
         })?;
-        cfg.jump = Some(Box::new(build_config(state, &jump, None, depth + 1)?));
+        let jump_cfg = build_config(
+            state,
+            &jump,
+            jump_passwords.get(jump_id).map(String::as_str),
+            jump_passwords,
+            depth + 1,
+        )
+        .map_err(|mut e| {
+            if matches!(e.code.as_str(), "password_required" | "passphrase_required") {
+                // Already set if the error comes from further down the chain.
+                e.host_id.get_or_insert_with(|| jump_id.clone());
+            }
+            e
+        })?;
+        cfg.jump = Some(Box::new(jump_cfg));
     }
     Ok(cfg)
 }
@@ -167,15 +185,40 @@ pub fn resolve_target(state: &AppState, target: &ConnectTarget) -> CmdResult<Hos
     }
 }
 
+/// Id of the jump host `hop` steps away from `host`.
+fn jump_host_id(state: &AppState, host: &Host, hop: usize) -> Option<String> {
+    let mut id = host.jump_host_id.clone()?;
+    for _ in 1..hop {
+        id = state.db().get::<Host>(&id).ok()?.jump_host_id?;
+    }
+    Some(id)
+}
+
+fn connect_error(state: &AppState, host: &Host, e: SshError) -> CmdError {
+    let hop = match &e {
+        SshError::JumpAuth { hop, .. } => Some(*hop),
+        _ => None,
+    };
+    let mut err = CmdError::from(e);
+    err.host_id = hop.and_then(|hop| jump_host_id(state, host, hop));
+    err
+}
+
 /// Connect (with UI prompts for host keys / keyboard-interactive) and record history.
 /// Returns the connection and the history row id (for saved hosts).
 pub async fn connect_host(
     app: &AppHandle,
     host: &Host,
-    password: Option<&str>,
+    target: &ConnectTarget,
 ) -> CmdResult<(SshConnection, Option<i64>)> {
     let state = app.state::<AppState>();
-    let cfg = build_config(&state, host, password, 0)?;
+    let cfg = build_config(
+        &state,
+        host,
+        target.password.as_deref(),
+        &target.jump_passwords,
+        0,
+    )?;
     let interaction = Arc::new(DesktopInteraction {
         app: app.clone(),
         label: host.display_name().to_string(),
@@ -189,7 +232,8 @@ pub async fn connect_host(
             .log_connection_start(&host.id, result.is_ok(), err.as_deref())
             .ok();
     }
-    Ok((result?, log_id))
+    let conn = result.map_err(|e| connect_error(&state, host, e))?;
+    Ok((conn, log_id))
 }
 
 fn host_vars(host: &Host) -> HashMap<String, String> {
@@ -219,7 +263,7 @@ pub async fn ssh_connect(
         old.shell.close();
     }
 
-    let (conn, log_id) = connect_host(&app, &host, target.password.as_deref()).await?;
+    let (conn, log_id) = connect_host(&app, &host, &target).await?;
     let conn = Arc::new(conn);
 
     // Coalesce output chunks into fewer IPC messages under heavy output.
@@ -407,4 +451,65 @@ pub fn snippet_run(
         }
     }
     Ok(sent)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use termindo_core::db::Db;
+
+    fn save(state: &AppState, name: &str, jump: Option<&Host>) -> Host {
+        let mut host = quick_host(&QuickConnect {
+            hostname: name.into(),
+            port: None,
+            username: "u".into(),
+        });
+        host.id = name.into();
+        host.jump_host_id = jump.map(|j| j.id.clone());
+        state.db().save(&mut host).unwrap();
+        host
+    }
+
+    fn password(cfg: &ConnectConfig) -> &str {
+        match &cfg.auth {
+            AuthMethod::Password(p) => p,
+            other => panic!("expected password auth, got {other:?}"),
+        }
+    }
+
+    /// target -> near -> far, all asking for a password when connecting.
+    #[test]
+    fn each_host_in_a_jump_chain_gets_its_own_password() {
+        let state = AppState::new(Db::open_in_memory().unwrap(), std::env::temp_dir());
+        let far = save(&state, "far", None);
+        let near = save(&state, "near", Some(&far));
+        let target = save(&state, "target", Some(&near));
+        let mut jumps = HashMap::new();
+        let needs = |jumps: &HashMap<String, String>| {
+            let e = build_config(&state, &target, Some("t"), jumps, 0).unwrap_err();
+            assert_eq!(e.code, "password_required");
+            e.host_id
+        };
+
+        assert_eq!(needs(&jumps), Some(near.id.clone()));
+        jumps.insert(near.id.clone(), "n".into());
+        assert_eq!(needs(&jumps), Some(far.id.clone()));
+        jumps.insert(far.id.clone(), "f".into());
+
+        let cfg = build_config(&state, &target, Some("t"), &jumps, 0).unwrap();
+        let near_cfg = cfg.jump.as_deref().unwrap();
+        let far_cfg = near_cfg.jump.as_deref().unwrap();
+        assert_eq!(
+            [password(&cfg), password(near_cfg), password(far_cfg)],
+            ["t", "n", "f"]
+        );
+
+        // The target's own password is reported without a host id.
+        let e = build_config(&state, &target, None, &jumps, 0).unwrap_err();
+        assert_eq!(e.host_id, None);
+
+        // Authentication errors are traced back to the host at that hop.
+        assert_eq!(jump_host_id(&state, &target, 1), Some(near.id));
+        assert_eq!(jump_host_id(&state, &target, 2), Some(far.id));
+    }
 }
