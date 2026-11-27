@@ -3,6 +3,7 @@ name = "termindo-server"
 description = "Termindo sync server: stores end-to-end encrypted records, never sees plaintext"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [lib]
 name = "termindo_server"

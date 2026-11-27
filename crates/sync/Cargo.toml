@@ -3,6 +3,7 @@ name = "termindo-sync"
 description = "Termindo sync: wire protocol, end-to-end encrypted record envelopes and the sync engine"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [features]
 default = ["client"]

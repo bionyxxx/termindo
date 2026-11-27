@@ -5,6 +5,7 @@ members = ["crates/core", "crates/ssh", "crates/sync", "apps/server", "apps/desk
 [workspace.package]
 version = "0.1.6"
 edition = "2021"
+license = "AGPL-3.0-only"
 
 [workspace.dependencies]
 termindo-core = { path = "crates/core" }
