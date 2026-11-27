@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
-use termindo_ssh::sftp::TransferControl;
+use termindo_ssh::sftp::{SourceStamp, TransferControl};
 use termindo_ssh::SshError;
 
 use crate::state::AppState;
@@ -54,8 +54,8 @@ pub struct TransferInfo {
 struct Item {
     info: TransferInfo,
     control: Option<Arc<TransferControl>>,
-    /// Continue from the partial file instead of starting over.
-    resume: bool,
+    /// Set once the destination holds data from this transfer, so a retry can continue it.
+    partial: Option<SourceStamp>,
 }
 
 #[derive(Default)]
@@ -83,7 +83,7 @@ impl TransferManager {
         self.items.lock().unwrap().push(Item {
             info,
             control: None,
-            resume: false,
+            partial: None,
         });
         emit(app, &out);
         out
@@ -121,7 +121,6 @@ impl TransferManager {
             if matches!(i.info.state, TransferState::Paused | TransferState::Error) {
                 i.info.state = TransferState::Queued;
                 i.info.error = None;
-                i.resume = true;
             }
         });
         pump(app);
@@ -169,6 +168,26 @@ impl TransferManager {
     }
 }
 
+/// Queued items that may start now, best first.
+fn startable(items: &[Item]) -> Vec<usize> {
+    let mut queued: Vec<usize> = items
+        .iter()
+        .enumerate()
+        // A paused attempt keeps its control until it stops writing. Starting another one
+        // before that would put two writers on the same file.
+        .filter(|(_, i)| i.info.state == TransferState::Queued && i.control.is_none())
+        .map(|(n, _)| n)
+        .collect();
+    queued.sort_by(|&a, &b| {
+        items[b]
+            .info
+            .priority
+            .cmp(&items[a].info.priority)
+            .then(items[a].info.created_at.cmp(&items[b].info.created_at))
+    });
+    queued
+}
+
 /// Start queued transfers while below the concurrency limit.
 pub fn pump(app: &AppHandle) {
     let state = app.state::<AppState>();
@@ -180,20 +199,7 @@ pub fn pump(app: &AppHandle) {
             .iter()
             .filter(|i| i.info.state == TransferState::Running)
             .count();
-        let mut queued: Vec<usize> = items
-            .iter()
-            .enumerate()
-            .filter(|(_, i)| i.info.state == TransferState::Queued)
-            .map(|(n, _)| n)
-            .collect();
-        queued.sort_by(|&a, &b| {
-            items[b]
-                .info
-                .priority
-                .cmp(&items[a].info.priority)
-                .then(items[a].info.created_at.cmp(&items[b].info.created_at))
-        });
-        for idx in queued
+        for idx in startable(&items)
             .into_iter()
             .take(MAX_CONCURRENT.saturating_sub(running))
         {
@@ -202,14 +208,14 @@ pub fn pump(app: &AppHandle) {
             item.control = Some(control.clone());
             item.info.state = TransferState::Running;
             item.info.error = None;
-            to_start.push((item.info.clone(), control, item.resume));
+            to_start.push((item.info.clone(), control, item.partial));
         }
     }
-    for (info, control, resume) in to_start {
+    for (info, control, partial) in to_start {
         emit(app, &info);
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            run_transfer(app, info, control, resume).await;
+            run_transfer(app, info, control, partial).await;
         });
     }
 }
@@ -218,7 +224,7 @@ async fn run_transfer(
     app: AppHandle,
     info: TransferInfo,
     control: Arc<TransferControl>,
-    resume: bool,
+    mut partial: Option<SourceStamp>,
 ) {
     let state = app.state::<AppState>();
     let manager = state.transfers.clone();
@@ -253,13 +259,13 @@ async fn run_transfer(
                 Direction::Download => {
                     entry
                         .client
-                        .download(&info.remote_path, &local, resume, &control, progress)
+                        .download(&info.remote_path, &local, &mut partial, &control, progress)
                         .await
                 }
                 Direction::Upload => {
                     entry
                         .client
-                        .upload(&local, &info.remote_path, resume, &control, progress)
+                        .upload(&local, &info.remote_path, &mut partial, &control, progress)
                         .await
                 }
             }
@@ -268,6 +274,7 @@ async fn run_transfer(
 
     manager.update(&app, &id, |i| {
         i.control = None;
+        i.partial = partial;
         i.info.speed = 0;
         match result {
             Ok(n) => {
@@ -276,14 +283,11 @@ async fn run_transfer(
                 i.info.size = i.info.size.max(n);
             }
             // Paused or cancelled by the user: state already set.
-            Err(SshError::Cancelled) => {
-                i.resume = true;
-            }
+            Err(SshError::Cancelled) => {}
             Err(e) => {
                 if i.info.state == TransferState::Running {
                     i.info.state = TransferState::Error;
                     i.info.error = Some(e.to_string());
-                    i.resume = true;
                 }
             }
         }
@@ -300,4 +304,42 @@ fn result_is_download_done(manager: &TransferManager, id: &str) -> bool {
             && i.info.state == TransferState::Done
             && i.info.direction == Direction::Download
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: &str, priority: i32) -> Item {
+        Item {
+            info: TransferInfo {
+                id: id.into(),
+                sftp_id: "s".into(),
+                direction: Direction::Download,
+                local_path: "l".into(),
+                remote_path: "r".into(),
+                name: id.into(),
+                size: 0,
+                transferred: 0,
+                state: TransferState::Queued,
+                error: None,
+                priority,
+                created_at: 0,
+                speed: 0,
+            },
+            control: None,
+            partial: None,
+        }
+    }
+
+    #[test]
+    fn resumed_item_waits_for_previous_attempt_to_stop() {
+        let mut items = vec![item("a", 0), item("b", 1)];
+        assert_eq!(startable(&items), [1, 0]);
+        // Paused and resumed while the old task is still running.
+        items[1].control = Some(TransferControl::new());
+        assert_eq!(startable(&items), [0]);
+        items[1].control = None;
+        assert_eq!(startable(&items), [1, 0]);
+    }
 }

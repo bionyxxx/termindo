@@ -30,7 +30,8 @@ import {
   X,
   FileEdit,
 } from "lucide-react";
-import { api, errorCode, errorMessage } from "../lib/api";
+import { api, errorMessage } from "../lib/api";
+import { PromptedSecrets } from "../lib/secrets";
 import { cn, formatBytes, joinRemote, parentRemote, permString } from "../lib/utils";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, promptInput, toast } from "../stores/ui";
@@ -397,7 +398,7 @@ export function SftpView({ tab }: { tab: SftpTab }) {
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const password = useRef<string | null>(null);
+  const secrets = useRef(new PromptedSecrets());
 
   const listRemote = useCallback(
     async (dir: string) => {
@@ -433,23 +434,24 @@ export function SftpView({ tab }: { tab: SftpTab }) {
     setStatus("connecting");
     setError(null);
     try {
-      const r = await api.sftpOpen(sftpId, { ...tab.target, password: password.current });
+      const r = await api.sftpOpen(sftpId, secrets.current.addTo(tab.target));
       setRemoteHome(r.home);
       setStatus("ready");
       await listRemote(r.startDir);
     } catch (e) {
-      const code = errorCode(e);
-      if (code === "password_required" || code === "passphrase_required" || (code === "auth_failed" && password.current !== null)) {
-        const v = await promptInput({ title: code === "passphrase_required" ? "Key passphrase" : "Password", label: "Password", secret: true, message: errorMessage(e), confirmLabel: "Connect" });
+      const request = secrets.current.request(e, tab.title);
+      if (request) {
+        const { hostId, ...prompt } = request;
+        const v = await promptInput({ ...prompt, secret: true, confirmLabel: "Connect" });
         if (v !== null) {
-          password.current = v;
+          secrets.current.set(hostId, v);
           return connect();
         }
       }
       setStatus("error");
       setError(errorMessage(e));
     }
-  }, [sftpId, tab.target, listRemote]);
+  }, [sftpId, tab.target, tab.title, listRemote]);
 
   useEffect(() => {
     clearTimeout(closeTimer.current);

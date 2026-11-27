@@ -131,6 +131,8 @@ export interface ConnectTarget {
   hostId?: string | null;
   quick?: QuickConnect | null;
   password?: string | null;
+  /** The same, for jump hosts, by host id. */
+  jumpPasswords?: Record<string, string>;
 }
 
 export interface ConnectInfo {

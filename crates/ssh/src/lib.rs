@@ -8,6 +8,7 @@
 pub mod client;
 pub mod error;
 pub mod keys;
+mod prompt_timeout;
 pub mod sftp;
 pub mod shell;
 
