@@ -241,7 +241,9 @@ impl SshConnection {
                 (handle, None)
             }
             Some(jump_cfg) => {
-                let jump = Self::connect(*jump_cfg.clone(), interaction.clone()).await?;
+                let jump = Self::connect(*jump_cfg.clone(), interaction.clone())
+                    .await
+                    .map_err(|e| e.via_jump(jump_cfg.target()))?;
                 let channel = jump
                     .handle
                     .channel_open_direct_tcpip(cfg.host.clone(), cfg.port as u32, "127.0.0.1", 0)

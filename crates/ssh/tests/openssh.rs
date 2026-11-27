@@ -327,3 +327,24 @@ async fn slow_host_key_approval_is_not_a_timeout() {
         .expect("connect after a slow approval");
     assert_eq!(conn.exec("true").await.unwrap().0, Some(0));
 }
+
+/// An authentication error must say which host in a jump chain rejected us.
+#[tokio::test]
+async fn jump_host_auth_failure_names_the_hop() {
+    let Some((host, port, user, pw)) = target() else {
+        return eprintln!("TERMINDO_TEST_SSH not set, skipping");
+    };
+    let cfg = |password: &str, jump: Option<ConnectConfig>| {
+        let auth = AuthMethod::Password(Zeroizing::new(password.into()));
+        let mut c = ConnectConfig::new(host.clone(), port, user.clone(), auth);
+        c.jump = jump.map(Box::new);
+        c
+    };
+    // The innermost host (hop 2) is the one with the wrong password.
+    let chain = cfg(&pw, Some(cfg(&pw, Some(cfg("definitely-wrong", None)))));
+    match SshConnection::connect(chain, Arc::new(InsecureAcceptAll)).await {
+        Err(termindo_ssh::SshError::JumpAuth { hop: 2, .. }) => {}
+        Err(e) => panic!("expected an auth error at hop 2, got {e}"),
+        Ok(_) => panic!("wrong password accepted"),
+    }
+}

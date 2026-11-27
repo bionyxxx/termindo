@@ -13,6 +13,12 @@ export function errorCode(e: unknown): string | undefined {
   return undefined;
 }
 
+/** The jump host an error is about, if it is not about the target itself. */
+export function errorHostId(e: unknown): string | undefined {
+  const id = (e as { hostId?: unknown } | null)?.hostId;
+  return typeof id === "string" ? id : undefined;
+}
+
 export const api = {
   // vault
   vaultStatus: () => invoke<T.VaultStatus>("vault_status"),
