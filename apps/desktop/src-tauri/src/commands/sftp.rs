@@ -35,7 +35,7 @@ pub async fn sftp_open(
     target: ConnectTarget,
 ) -> CmdResult<SftpOpened> {
     let host = resolve_target(&state, &target)?;
-    let (conn, _log) = connect_host(&app, &host, target.password.as_deref()).await?;
+    let (conn, _log) = connect_host(&app, &host, &target).await?;
     let conn = Arc::new(conn);
     let client = Arc::new(SftpClient::open(&conn).await?);
     let home = client.home_dir().await.unwrap_or_else(|_| "/".into());

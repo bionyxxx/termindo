@@ -8,7 +8,8 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, Channel, errorCode, errorMessage } from "../lib/api";
+import { api, Channel, errorMessage } from "../lib/api";
+import { PromptedSecrets } from "../lib/secrets";
 import { useData } from "../stores/data";
 import { type Settings, useSettings } from "../stores/settings";
 import { promptInput, toast } from "../stores/ui";
@@ -41,8 +42,7 @@ export class TermSession {
   private disposed = false;
   private reconnects = 0;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
-  /** One-off password entered in a prompt; kept in memory only for reconnects. */
-  private password: string | null = null;
+  private readonly secrets = new PromptedSecrets();
   private resizeTimer?: ReturnType<typeof setTimeout>;
 
   constructor(paneId: string, settings: Settings) {
@@ -201,7 +201,7 @@ export class TermSession {
     channel.onmessage = (buf) => this.term.write(new Uint8Array(buf));
     try {
       this.fit();
-      await api.sshConnect(this.paneId, { ...pane.target, password: this.password }, this.term.cols, this.term.rows, channel);
+      await api.sshConnect(this.paneId, this.secrets.addTo(pane.target), this.term.cols, this.term.rows, channel);
       this.connected = true;
       this.reconnects = 0;
       this.status("connected");
@@ -209,18 +209,13 @@ export class TermSession {
       this.fit();
       void api.sshResize(this.paneId, this.term.cols, this.term.rows).catch(() => {});
     } catch (e) {
-      const code = errorCode(e);
-      if (code === "password_required" || code === "passphrase_required" || (code === "auth_failed" && this.password !== null)) {
-        const value = await promptInput({
-          title: code === "passphrase_required" ? "Key passphrase" : "Password",
-          message: code === "auth_failed" ? `Authentication failed for ${pane.title}. Try again.` : errorMessage(e),
-          label: code === "passphrase_required" ? "Passphrase" : "Password",
-          secret: true,
-          confirmLabel: "Connect",
-        });
+      const request = this.secrets.request(e, pane.title);
+      if (request) {
+        const { hostId, ...prompt } = request;
+        const value = await promptInput({ ...prompt, secret: true, confirmLabel: "Connect" });
         this.connecting = false;
         if (value !== null) {
-          this.password = value;
+          this.secrets.set(hostId, value);
           return await this.connect();
         }
         this.term.write(`${RED}Cancelled.${RESET} ${DIM}Press Enter to retry.${RESET}\r\n`);
