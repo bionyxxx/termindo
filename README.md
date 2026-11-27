@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/desktop/public/logo.svg" alt="Termindo logo" width="128" height="128">
+</p>
+
 # Termindo
 
 A cross-platform desktop SSH client: terminal tabs and split panes, host & snippet
