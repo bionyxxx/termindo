@@ -106,6 +106,8 @@ export class TermSession {
       return false;
     }
     if (mod && e.shiftKey && e.code === "KeyV") {
+      // Without this the webview also runs its native paste, so the text lands twice.
+      e.preventDefault();
       void this.paste();
       return false;
     }
