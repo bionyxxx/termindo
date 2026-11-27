@@ -3,6 +3,7 @@ name = "termindo-desktop"
 description = "Termindo desktop app (Tauri 2)"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [lib]
 name = "termindo_desktop_lib"

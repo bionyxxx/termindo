@@ -3,6 +3,7 @@ name = "termindo-core"
 description = "Termindo core: data model, local database, vault and crypto"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 thiserror.workspace = true

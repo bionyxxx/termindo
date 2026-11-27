@@ -117,4 +117,11 @@ Docker (Postgres + server + Caddy HTTPS + daily backups): see
 See [docs/security.md](docs/security.md).
 
 ## License
-Not chosen yet (all rights reserved until a license is added).
+Copyright (C) 2026 Dutta Fachrezy
+
+Termindo is free software, licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). It comes
+with no warranty. If you distribute it, or let people use a modified version over a
+network, you must offer them the corresponding source under the same license.
+
+Third-party dependencies keep their own licenses.
