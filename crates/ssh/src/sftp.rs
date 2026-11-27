@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::{FileAttributes, OpenFlags};
@@ -47,6 +48,13 @@ impl TransferControl {
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
     }
+}
+
+/// Version of the source file that a partial destination was copied from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceStamp {
+    size: u64,
+    modified: Option<SystemTime>,
 }
 
 pub fn join_remote(dir: &str, name: &str) -> String {
@@ -273,44 +281,55 @@ impl SftpClient {
         Ok(())
     }
 
-    /// Download `remote` to `local`. If `resume` and `local` exists, continues from its size.
-    /// `progress(done, total)` is called after every chunk. Returns bytes transferred in total.
+    /// Download `remote` to `local`. `progress(done, total)` is called after every chunk.
+    /// Returns bytes transferred in total.
+    ///
+    /// `partial` carries resume state between attempts of one transfer: pass `None` the first
+    /// time, which overwrites `local`. It is set once `local` holds data from this transfer;
+    /// passing it back continues from the size of `local`, unless `remote` has changed since.
     pub async fn download<F>(
         &self,
         remote: &str,
         local: &Path,
-        resume: bool,
+        partial: &mut Option<SourceStamp>,
         control: &TransferControl,
         mut progress: F,
     ) -> Result<u64>
     where
         F: FnMut(u64, u64) + Send,
     {
-        let total = self.session.metadata(remote).await?.size.unwrap_or(0);
+        let attrs = self.session.metadata(remote).await?;
+        let total = attrs.size.unwrap_or(0);
+        let source = SourceStamp {
+            size: total,
+            modified: attrs
+                .mtime
+                .map(|s| UNIX_EPOCH + Duration::from_secs(s.into())),
+        };
         if let Some(parent) = local.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
         let mut offset = 0u64;
-        let mut out = if resume {
-            let f = tokio::fs::OpenOptions::new()
-                .create(true)
+        if *partial == Some(source) {
+            if let Ok(meta) = tokio::fs::metadata(local).await {
+                // A local file longer than the remote one is not our partial: start over.
+                if meta.len() <= total {
+                    offset = meta.len();
+                }
+            }
+        }
+        // Open the source first, so a failure here leaves `local` untouched.
+        let mut src = self.session.open(remote).await?;
+        let mut out = if offset > 0 {
+            tokio::fs::OpenOptions::new()
                 .append(true)
                 .open(local)
-                .await?;
-            offset = f.metadata().await?.len();
-            if offset > total {
-                // Local file is longer than remote: start over.
-                drop(f);
-                offset = 0;
-                tokio::fs::File::create(local).await?
-            } else {
-                f
-            }
+                .await?
         } else {
             tokio::fs::File::create(local).await?
         };
+        *partial = Some(source);
 
-        let mut src = self.session.open(remote).await?;
         if offset > 0 {
             src.seek(std::io::SeekFrom::Start(offset)).await?;
         }
@@ -340,12 +359,14 @@ impl SftpClient {
         Ok(done)
     }
 
-    /// Upload `local` to `remote`. If `resume`, continues after the remote file's current size.
+    /// Upload `local` to `remote`. `partial` works as in [`SftpClient::download`]: `None`
+    /// overwrites `remote`, and the value set by an earlier attempt continues after the
+    /// remote file's current size, unless `local` has changed since.
     pub async fn upload<F>(
         &self,
         local: &Path,
         remote: &str,
-        resume: bool,
+        partial: &mut Option<SourceStamp>,
         control: &TransferControl,
         mut progress: F,
     ) -> Result<u64>
@@ -353,10 +374,15 @@ impl SftpClient {
         F: FnMut(u64, u64) + Send,
     {
         let mut src = tokio::fs::File::open(local).await?;
-        let total = src.metadata().await?.len();
+        let meta = src.metadata().await?;
+        let total = meta.len();
+        let source = SourceStamp {
+            size: total,
+            modified: meta.modified().ok(),
+        };
 
         let mut offset = 0u64;
-        if resume {
+        if *partial == Some(source) {
             if let Ok(attrs) = self.session.metadata(remote).await {
                 let existing = attrs.size.unwrap_or(0);
                 if existing <= total {
@@ -379,6 +405,7 @@ impl SftpClient {
                 )
                 .await?
         };
+        *partial = Some(source);
         if offset > 0 {
             src.seek(std::io::SeekFrom::Start(offset)).await?;
         }
