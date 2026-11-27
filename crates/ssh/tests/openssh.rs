@@ -6,10 +6,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use termindo_ssh::client::InsecureAcceptAll;
+use termindo_ssh::client::{BoxFuture, InsecureAcceptAll};
 use termindo_ssh::sftp::{SftpClient, TransferControl};
 use termindo_ssh::shell::{open_shell, ShellEvent, ShellOptions};
-use termindo_ssh::{AuthMethod, ConnectConfig, SshConnection};
+use termindo_ssh::{
+    AuthMethod, ConnectConfig, HostKeyInfo, Interaction, KbdRequest, SshConnection,
+};
 use zeroize::Zeroizing;
 
 fn target() -> Option<(String, u16, String, String)> {
@@ -176,4 +178,31 @@ async fn public_key_auth_with_generated_key() {
         Err(e) => panic!("expected auth error, got {e}"),
         Ok(_) => panic!("wrong password accepted"),
     }
+}
+
+/// A user who takes longer than the connect timeout to answer a prompt must not be cut off.
+#[tokio::test]
+async fn slow_host_key_approval_is_not_a_timeout() {
+    struct SlowApproval;
+    impl Interaction for SlowApproval {
+        fn verify_host_key(&self, _info: HostKeyInfo) -> BoxFuture<'_, bool> {
+            Box::pin(async {
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                true
+            })
+        }
+        fn keyboard_interactive(&self, _req: KbdRequest) -> BoxFuture<'_, Option<Vec<String>>> {
+            Box::pin(async { None })
+        }
+    }
+
+    let Some((host, port, user, pw)) = target() else {
+        return eprintln!("TERMINDO_TEST_SSH not set, skipping");
+    };
+    let mut cfg = ConnectConfig::new(host, port, user, AuthMethod::Password(Zeroizing::new(pw)));
+    cfg.connect_timeout = Duration::from_secs(2);
+    let conn = SshConnection::connect(cfg, Arc::new(SlowApproval))
+        .await
+        .expect("connect after a slow approval");
+    assert_eq!(conn.exec("true").await.unwrap().0, Some(0));
 }

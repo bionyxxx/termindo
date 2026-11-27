@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::error::{Result, SshError};
+use crate::prompt_timeout;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -117,6 +118,7 @@ pub struct ConnectConfig {
     pub auth: AuthMethod,
     /// Keepalive interval in seconds; 0 disables keepalives.
     pub keepalive_secs: u32,
+    /// Limit per connection, not counting time spent waiting on [`Interaction`] prompts.
     pub connect_timeout: Duration,
     /// Optional jump host (ProxyJump); may itself have a jump host.
     pub jump: Option<Box<ConnectConfig>>,
@@ -200,11 +202,12 @@ impl SshConnection {
         interaction: Arc<dyn Interaction>,
     ) -> BoxFuture<'static, Result<SshConnection>> {
         Box::pin(async move {
-            let timeout = cfg.connect_timeout;
-            match tokio::time::timeout(timeout, Self::connect_inner(cfg, interaction)).await {
-                Ok(r) => r,
-                Err(_) => Err(SshError::Timeout),
-            }
+            let limit = cfg.connect_timeout;
+            let (interaction, waiting) = prompt_timeout::track(interaction);
+            let attempt = Self::connect_inner(cfg, interaction);
+            prompt_timeout::timeout(limit, waiting, attempt)
+                .await
+                .unwrap_or(Err(SshError::Timeout))
         })
     }
 
