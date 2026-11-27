@@ -31,6 +31,7 @@ import {
   FileEdit,
 } from "lucide-react";
 import { api, errorCode, errorMessage } from "../lib/api";
+import { dropZone, startDrag } from "../lib/drag";
 import { cn, formatBytes, joinRemote, parentRemote, permString } from "../lib/utils";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, promptInput, toast } from "../stores/ui";
@@ -140,7 +141,6 @@ function FileTable({
   dragType: string;
 }) {
   const lastClicked = useRef<number>(-1);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const acceptType = dragType === "termindo/remote" ? "termindo/local" : "termindo/remote";
 
   const click = (e: React.MouseEvent, i: number, r: Row) => {
@@ -159,22 +159,8 @@ function FileTable({
 
   return (
     <div
-      className={cn("min-h-0 flex-1 overflow-auto", dropTarget === "" && "bg-accent/5 outline outline-1 -outline-offset-2 outline-accent")}
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(acceptType)) {
-          e.preventDefault();
-          setDropTarget((t) => t ?? "");
-        }
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
-      }}
-      onDrop={(e) => {
-        const data = e.dataTransfer.getData(acceptType);
-        const target = dropTarget;
-        setDropTarget(null);
-        if (data) onDropItems(data, target || null);
-      }}
+      ref={dropZone(acceptType, (data) => onDropItems(data, null))}
+      className="min-h-0 flex-1 overflow-auto data-drag-over:bg-accent/5 data-drag-over:outline data-drag-over:-outline-offset-2 data-drag-over:outline-accent"
     >
       <table className="w-full table-fixed text-[12.5px]">
         <thead className="sticky top-0 z-[1] bg-panel text-left text-[11px] text-muted">
@@ -190,33 +176,23 @@ function FileTable({
             <CM.Root key={r.path}>
               <CM.Trigger asChild>
                 <tr
-                  draggable
-                  onDragStart={(e) => {
-                    const paths = selected.has(r.path) ? rows.filter((x) => selected.has(x.path)) : [r];
-                    e.dataTransfer.setData(dragType, JSON.stringify(paths.map((p) => ({ path: p.path, isDir: p.isDir }))));
-                  }}
-                  onDragOver={(e) => {
-                    if (r.isDir && e.dataTransfer.types.includes(acceptType)) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDropTarget(r.path);
-                    }
-                  }}
-                  onDrop={(e) => {
-                    if (!r.isDir) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDropTarget(null);
-                    const data = e.dataTransfer.getData(acceptType);
-                    if (data) onDropItems(data, r.path);
-                  }}
+                  ref={r.isDir ? dropZone(acceptType, (data) => onDropItems(data, r.path)) : undefined}
+                  onPointerDown={(e) =>
+                    startDrag(e, dragType, () => {
+                      const paths = selected.has(r.path) ? rows.filter((x) => selected.has(x.path)) : [r];
+                      return {
+                        data: JSON.stringify(paths.map((p) => ({ path: p.path, isDir: p.isDir }))),
+                        label: paths.length > 1 ? `${paths.length} items` : r.name,
+                      };
+                    })
+                  }
                   onClick={(e) => click(e, i, r)}
                   onContextMenu={() => !selected.has(r.path) && setSelected(new Set([r.path]))}
                   onDoubleClick={() => onOpen(r)}
                   className={cn(
                     "cursor-default border-b border-line/40",
                     selected.has(r.path) ? "bg-accent/15" : "hover:bg-hover/60",
-                    dropTarget === r.path && "bg-accent/25",
+                    "data-drag-over:bg-accent/25!",
                   )}
                 >
                   <td className="truncate px-3 py-1">
