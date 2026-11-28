@@ -1,7 +1,7 @@
 # PLAN.md — Termindo
 
 > Aplikasi SSH client desktop setara Termius.
-> Status: **F1–F5 ada dengan beberapa celah, F6 berjalan** (rilis terakhir v0.1.6, lihat §9).
+> Status: **F1–F5 ada dengan beberapa celah, F6 berjalan** (rilis terakhir v0.1.7, lihat §9).
 > Terakhir diperbarui: 2026-11-28
 
 ---
@@ -218,7 +218,7 @@ Prinsip: **offline-first** — semua operasi terhadap SQLite lokal, sync berjala
 
 ## 9. Status implementasi (2026-11-28)
 
-Rilis terakhir: **v0.1.6**. Status di bawah berasal dari pembacaan kode dan test otomatis;
+Rilis terakhir: **v0.1.7**. Status di bawah berasal dari pembacaan kode dan test otomatis;
 yang diuji manual di aplikasi disebut di bagian Verifikasi.
 
 | Fase | Status | Sudah ada |
