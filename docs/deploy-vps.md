@@ -14,7 +14,6 @@ semua perangkatmu menyinkronkan host, key, snippet, dan known hosts lewat server
 |---|---|
 | VPS | Ubuntu 22.04/24.04, 1 vCPU, 1 GB RAM sudah cukup, disk 10 GB+ |
 | Domain/subdomain | Misalnya `sync.domainmu.com` |
-| Akun GitHub | Untuk menarik image server dari GHCR (repo private) |
 
 ## 1. DNS
 Buat record **A** `sync.domainmu.com` yang mengarah ke IP publik VPS (dan **AAAA**
@@ -31,22 +30,21 @@ ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 curl -fsSL https://get.docker.com | sh
 ```
 
-## 3. Login ke GitHub Container Registry
-Image server dibangun oleh workflow **Server image** dan disimpan di
-`ghcr.io/bionyxxx/termindo-server`. Karena repo-nya private, VPS perlu token:
+## 3. Salin konfigurasi
+Image server dibangun oleh workflow **Server image** dan dipublikasikan secara publik di
+`ghcr.io/bionyxxx/termindo-server`, jadi VPS tidak perlu `docker login`.
 
-1. GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)**
-   → Generate, dengan scope **`read:packages`** saja.
-2. Di VPS:
-   ```bash
-   echo TOKEN_KAMU | docker login ghcr.io -u bionyxxx --password-stdin
-   ```
-
-## 4. Salin konfigurasi
-Dari laptop (di folder repo):
+Ambil folder `deploy/` dari repo, langsung di VPS:
+```bash
+git clone --depth 1 https://github.com/bionyxxx/termindo.git /tmp/termindo
+mkdir -p /opt/termindo && cp -r /tmp/termindo/deploy/. /opt/termindo/ && rm -rf /tmp/termindo
+```
+Atau dari laptop (di folder repo):
 ```bash
 rsync -av --exclude backups/ deploy/ root@IP_VPS:/opt/termindo/
 ```
+
+## 4. Isi `.env`
 Di VPS:
 ```bash
 cd /opt/termindo
@@ -92,7 +90,8 @@ Lalu buat rilis baru (`git tag vX.Y.Z && git push origin vX.Y.Z`).
 ```bash
 cd /opt/termindo && ./update.sh
 ```
-Untuk mengunci versi, set `TERMINDO_IMAGE=ghcr.io/bionyxxx/termindo-server:0.1` di `.env`.
+Untuk mengunci versi, set `TERMINDO_IMAGE` di `.env`, misalnya
+`ghcr.io/bionyxxx/termindo-server:0.1` (seri rilis) atau `...:sha-2baa68c` (commit tertentu).
 
 **Backup** dibuat harian di `/opt/termindo/backups` (simpan 7 harian, 4 mingguan,
 6 bulanan). Salin juga ke luar VPS secara berkala, misalnya:
