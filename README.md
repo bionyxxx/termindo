@@ -1,128 +1,131 @@
 <p align="center">
-  <img src="apps/desktop/public/logo.svg" alt="Termindo logo" width="128" height="128">
+  <img src="apps/desktop/public/logo.svg" alt="Logo Termindo" width="128" height="128">
 </p>
 
 # Termindo
 
-A cross-platform desktop SSH client: terminal tabs and split panes, host & snippet
-manager, SFTP with resumable transfers, and optional end-to-end encrypted sync to a
-server you host yourself.
+Klien SSH desktop lintas platform: tab terminal dan split pane, pengelola host &
+snippet, SFTP dengan transfer yang bisa dilanjutkan, serta sinkronisasi opsional
+terenkripsi end-to-end ke server yang Anda hosting sendiri.
 
-Built with **Rust** (Tauri 2, russh, rusqlite, Axum) and **React + TypeScript** (xterm.js).
+Dibangun dengan **Rust** (Tauri 2, russh, rusqlite, Axum) dan **React + TypeScript** (xterm.js).
 
-## Features
-- **SSH terminal**: password, private key (with passphrase), ssh-agent, keyboard-interactive (2FA/OTP),
-  ProxyJump chains, TOFU host key verification with change warnings, keepalive, auto-reconnect,
-  WebGL-rendered xterm.js with search, themes, copy/paste, clickable links.
-- **Workspace**: tabs (drag to reorder), split panes horizontally/vertically, keyboard navigation,
-  broadcast input to all panes, session restore on startup.
-- **Hosts & snippets**: nested groups, tags, search, command palette (Ctrl+K), quick connect
-  `user@host:port`, import `~/.ssh/config` (keys included), JSON/CSV backup, snippets with
-  `{{placeholders}}` run on one/many sessions, connection history.
-- **SFTP**: dual pane local/remote browser, drag & drop (also from your file manager),
-  upload/download files and folders, transfer queue with priority, pause/resume/retry,
-  edit remote files in your local editor (auto-upload on save), chmod/rename/delete/new.
-- **Vault**: Argon2id master password, XChaCha20-Poly1305 encrypted credentials, recovery key,
-  optional OS keychain unlock, auto-lock, Ed25519 key generation.
-- **Sync** (optional): zero-knowledge E2E encrypted sync with multi-device management
-  (`apps/server`, Docker compose in `deploy/`).
+## Fitur
+- **Terminal SSH**: password, private key (dengan passphrase), ssh-agent, keyboard-interactive (2FA/OTP),
+  rantai ProxyJump, verifikasi host key TOFU dengan peringatan saat berubah, keepalive,
+  sambung ulang otomatis, xterm.js yang dirender dengan WebGL, dilengkapi pencarian, tema,
+  salin/tempel, dan tautan yang bisa diklik.
+- **Workspace**: tab (seret untuk mengubah urutan), split pane horizontal/vertikal, navigasi
+  keyboard, broadcast input ke semua pane, pemulihan sesi saat aplikasi dibuka.
+- **Host & snippet**: grup bertingkat, tag, pencarian, command palette (Ctrl+K), koneksi cepat
+  `user@host:port`, impor `~/.ssh/config` (termasuk key), backup JSON/CSV, snippet dengan
+  `{{placeholders}}` yang bisa dijalankan di satu atau banyak sesi, riwayat koneksi.
+- **SFTP**: browser dua panel lokal/remote, drag & drop (juga dari file manager Anda),
+  unggah/unduh file dan folder, antrean transfer dengan prioritas, jeda/lanjutkan/coba lagi,
+  edit file remote di editor lokal (otomatis diunggah saat disimpan), chmod/ganti nama/hapus/buat baru.
+- **Vault**: master password Argon2id, kredensial terenkripsi XChaCha20-Poly1305, recovery key,
+  buka kunci lewat keychain OS (opsional), kunci otomatis, pembuatan key Ed25519.
+- **Sinkronisasi** (opsional): sinkronisasi E2E terenkripsi zero-knowledge dengan pengelolaan
+  banyak perangkat (`apps/server`, Docker compose di `deploy/`).
 
-## Repository layout
+## Struktur repositori
 ```
-crates/core      data model, SQLite, vault & crypto, ssh_config import, backups
-crates/ssh       russh connection/auth, PTY shells, SFTP, key generation
-crates/sync      sync protocol types, record encryption, client + engine
-apps/desktop     Tauri app (src-tauri = Rust, src = React UI)
-apps/server      Axum + Postgres sync server
-deploy/          docker compose for self-hosting the sync server
-docs/            architecture, security model, sync protocol
+crates/core      model data, SQLite, vault & kripto, impor ssh_config, backup
+crates/ssh       koneksi/autentikasi russh, shell PTY, SFTP, pembuatan key
+crates/sync      tipe protokol sinkronisasi, enkripsi record, klien + engine
+apps/desktop     aplikasi Tauri (src-tauri = Rust, src = UI React)
+apps/server      server sinkronisasi Axum + Postgres
+deploy/          docker compose untuk self-hosting server sinkronisasi
+docs/            arsitektur, model keamanan, protokol sinkronisasi
 ```
 
-## Development
+## Pengembangan
 
-Prerequisites: Rust (stable, via rustup), Node.js ≥ 20, and the
-[Tauri system dependencies](https://v2.tauri.app/start/prerequisites/)
-(Linux: `webkit2gtk-4.1`, `libsoup3`, `gtk3`, plus `dbus` for the keychain).
+Prasyarat: Rust (stable, via rustup), Node.js ≥ 20, dan
+[dependensi sistem Tauri](https://v2.tauri.app/start/prerequisites/)
+(Linux: `webkit2gtk-4.1`, `libsoup3`, `gtk3`, ditambah `dbus` untuk keychain).
 
 ```bash
 cd apps/desktop
 npm install
-npm run tauri dev          # run the desktop app with hot reload
-npm run tauri build        # installers in target/release/bundle/
+npm run tauri dev          # jalankan aplikasi desktop dengan hot reload
+npm run tauri build        # installer ada di target/release/bundle/
 ```
 
-Tests:
+Pengujian:
 
 ```bash
-cargo test --workspace                     # unit tests (core, ssh, sync, server)
-(cd apps/desktop && npm test)              # frontend unit tests
+cargo test --workspace                     # unit test (core, ssh, sync, server)
+(cd apps/desktop && npm test)              # unit test frontend
 
-# SSH integration tests against a real OpenSSH server (Docker):
+# Integration test SSH terhadap server OpenSSH asli (Docker):
 eval "$(scripts/test-sshd.sh)" && cargo test -p termindo-ssh --test openssh
 
-# Server integration tests:
+# Integration test server:
 docker run --rm -d --name termindo-pg -e POSTGRES_PASSWORD=pg -p 55432:5432 postgres:17
 TERMINDO_TEST_DATABASE_URL=postgres://postgres:pg@localhost:55432/postgres cargo test -p termindo-server
 ```
 
-Useful env vars for the desktop app: `TERMINDO_DATA_DIR` (separate profile),
-`TERMINDO_FAST_KDF=1` (debug builds only: cheap KDF for testing), `RUST_LOG`.
+Env var yang berguna untuk aplikasi desktop: `TERMINDO_DATA_DIR` (profil terpisah),
+`TERMINDO_FAST_KDF=1` (khusus debug build: KDF ringan untuk pengujian), `RUST_LOG`.
 
-## Installers
-The **Installers** workflow (`.github/workflows/bundle.yml`) builds `.deb`, `.rpm`,
-AppImage (Linux), a universal `.dmg` (macOS, Apple Silicon + Intel) and `.msi` / NSIS
+## Installer
+Workflow **Installers** (`.github/workflows/bundle.yml`) membuat `.deb`, `.rpm`,
+AppImage (Linux), `.dmg` universal (macOS, Apple Silicon + Intel), serta `.msi` / NSIS
 `.exe` (Windows):
 
-- run it manually from the Actions tab (or `gh workflow run bundle.yml`) and download
-  the installers from the run's artifacts;
-- or push a version tag (`git tag v0.1.0 && git push origin v0.1.0`, matching `version`
-  in `apps/desktop/src-tauri/tauri.conf.json`) to also get a draft GitHub release.
+- jalankan secara manual dari tab Actions (atau `gh workflow run bundle.yml`), lalu unduh
+  installer dari artifacts hasil run tersebut;
+- atau push tag versi (`git tag v0.1.0 && git push origin v0.1.0`, harus sama dengan `version`
+  di `apps/desktop/src-tauri/tauri.conf.json`) agar sekaligus dibuatkan draft GitHub release.
 
-Installers are **not code-signed yet**: macOS needs right-click → Open (or
-`xattr -dr com.apple.quarantine /Applications/Termindo.app`), and Windows SmartScreen
-shows "More info → Run anyway".
+Installer **belum ditandatangani (code signing)**: di macOS perlu klik kanan → Open (atau
+`xattr -dr com.apple.quarantine /Applications/Termindo.app`), dan Windows SmartScreen
+akan menampilkan "More info → Run anyway".
 
-Local build: `cd apps/desktop && npx tauri build` (output in `target/release/bundle/`).
+Build lokal: `cd apps/desktop && npx tauri build` (hasilnya di `target/release/bundle/`).
 
-### In-app updates
-Windows, macOS and the Linux AppImage update themselves from **Settings → Updates** (or the
-toast) with **Update & restart**. `.deb`/`.rpm` installs only get a notice and a link to
-the release page. Nothing is installed until the user presses the button.
+### Pembaruan dari dalam aplikasi
+Windows, macOS, dan Linux AppImage dapat memperbarui diri dari **Settings → Updates** (atau
+lewat toast) dengan tombol **Update & restart**. Instalasi `.deb`/`.rpm` hanya mendapat
+pemberitahuan dan tautan ke halaman rilis. Tidak ada yang dipasang sebelum pengguna menekan
+tombol tersebut.
 
-- Tag builds sign the updater bundles (`*.sig`) with a minisign key from the repository
-  secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The
-  matching public key is `plugins.updater.pubkey` in `tauri.conf.json`. Generate the pair
-  once with `npx tauri signer generate -w ~/.tauri/termindo-updater.key`. **If the private
-  key is lost, installed versions can no longer update in-app** and must be reinstalled by
-  hand.
-- The release job builds `latest.json` with `scripts/make-latest-json.mjs`. If a platform
-  has no signature, the job fails. The app reads
-  `releases/latest/download/latest.json`, so an update is visible only after the draft
-  release is published.
-- To test locally, build with a throwaway key:
+- Build dari tag menandatangani bundle updater (`*.sig`) dengan key minisign dari repository
+  secret `TAURI_SIGNING_PRIVATE_KEY` dan `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Public key
+  pasangannya ada di `plugins.updater.pubkey` pada `tauri.conf.json`. Pasangan key cukup
+  dibuat sekali dengan `npx tauri signer generate -w ~/.tauri/termindo-updater.key`. **Jika
+  private key hilang, versi yang sudah terpasang tidak bisa lagi diperbarui dari dalam
+  aplikasi** dan harus diinstal ulang secara manual.
+- Job rilis membuat `latest.json` dengan `scripts/make-latest-json.mjs`. Jika ada platform
+  yang tidak memiliki signature, job akan gagal. Aplikasi membaca
+  `releases/latest/download/latest.json`, sehingga pembaruan baru terlihat setelah draft
+  release dipublikasikan.
+- Untuk menguji secara lokal, build dengan key sementara:
   `TAURI_SIGNING_PRIVATE_KEY="$(cat test.key)" npx tauri build --config src-tauri/tauri.updater.conf.json`.
 
-## Sync (private cloud)
-Sync is optional and end-to-end encrypted. Run the sync server on your own VPS with
-Docker (Postgres + server + Caddy HTTPS + daily backups): see
-**[docs/deploy-vps.md](docs/deploy-vps.md)**. Client devices only need the installer.
+## Sinkronisasi (private cloud)
+Sinkronisasi bersifat opsional dan terenkripsi end-to-end. Jalankan server sinkronisasi di
+VPS Anda sendiri dengan Docker (Postgres + server + Caddy HTTPS + backup harian): lihat
+**[docs/deploy-vps.md](docs/deploy-vps.md)**. Perangkat klien hanya membutuhkan installer.
 
-- The server image is published publicly to `ghcr.io/bionyxxx/termindo-server` by the
-  **Server image** workflow (no registry login needed). Tags: `latest` (master),
-  `X.Y.Z` / `X.Y` (releases), `sha-<commit>`.
-- Set the repository variable `TERMINDO_SYNC_URL` (e.g. `https://sync.example.com`) and
-  release installers come preconfigured with that server.
-- Protocol and crypto details: [docs/sync-protocol.md](docs/sync-protocol.md).
+- Image server dipublikasikan secara publik ke `ghcr.io/bionyxxx/termindo-server` oleh
+  workflow **Server image** (tidak perlu login ke registry). Tag: `latest` (master),
+  `X.Y.Z` / `X.Y` (rilis), `sha-<commit>`.
+- Atur repository variable `TERMINDO_SYNC_URL` (misalnya `https://sync.example.com`), maka
+  installer rilis sudah terkonfigurasi dengan server tersebut.
+- Detail protokol dan kripto: [docs/sync-protocol.md](docs/sync-protocol.md).
 
-## Security
-See [docs/security.md](docs/security.md).
+## Keamanan
+Lihat [docs/security.md](docs/security.md).
 
-## License
+## Lisensi
 Copyright (C) 2026 Dutta Fachrezy
 
-Termindo is free software, licensed under the
-[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). It comes
-with no warranty. If you distribute it, or let people use a modified version over a
-network, you must offer them the corresponding source under the same license.
+Termindo adalah perangkat lunak bebas, dilisensikan di bawah
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Perangkat lunak
+ini diberikan tanpa jaminan apa pun. Jika Anda mendistribusikannya, atau mengizinkan orang
+lain menggunakan versi modifikasinya melalui jaringan, Anda wajib menyediakan kode sumber
+yang sesuai kepada mereka di bawah lisensi yang sama.
 
-Third-party dependencies keep their own licenses.
+Dependensi pihak ketiga tetap mengikuti lisensinya masing-masing.
